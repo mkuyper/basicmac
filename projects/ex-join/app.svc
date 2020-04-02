@@ -7,5 +7,6 @@ require:
     - lwtest
     - frag
     - fwman
+    - eckm
 
 # vim: syntax=yaml

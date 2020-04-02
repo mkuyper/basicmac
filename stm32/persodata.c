@@ -96,12 +96,14 @@ u4_t hal_hwid (void) {
     return pd.hwid;
 }
 
-#ifdef CFG_eeprom_keys
+#ifdef CFG_eeprom_region
 // provide region code
 u1_t os_getRegion (void) {
     return hal_region();
 }
+#endif
 
+#ifdef CFG_eeprom_keys
 // provide device ID (8 bytes, LSBF)
 void os_getDevEui (u1_t* buf) {
     memcpy(buf, hal_deveui(), 8);
