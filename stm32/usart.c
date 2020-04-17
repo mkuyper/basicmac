@@ -1,3 +1,4 @@
+// Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
 // Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 //
 // This file is subject to the terms and conditions defined in file 'LICENSE',
@@ -114,14 +115,14 @@ static void tx_off (void) {
     usart_off(TX_ON);
 }
 
-void usart_init (void) {
-    usart.on = 0;
+void usart_start (unsigned int br) {
     // activate pullup on tx line
     CFG_PIN(GPIO_USART_TX, GPIOCFG_MODE_INP | GPIOCFG_OSPEED_400kHz | GPIOCFG_OTYPE_OPEN | GPIOCFG_PUPD_PUP);
+    usart.br = br;
 }
 
-void usart_cfg (unsigned int br) {
-    usart.br = br;
+void usart_stop (void) {
+    CFG_PIN_DEFAULT(GPIO_USART_TX);
 }
 
 void usart_recv (usart_rx_func rx, void* arg) {

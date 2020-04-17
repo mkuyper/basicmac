@@ -1,3 +1,4 @@
+// Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
 // Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 // Copyright (C) 2014-2016 IBM Corporation. All rights reserved.
 //
@@ -1028,9 +1029,6 @@ void hal_init (void* bootarg) {
     hal_enableIRQs();
 
     leds_init();
-#ifdef BRD_USART
-    usart_init();
-#endif
 #ifdef BRD_VIBE_TIM
     vibe_init();
 #endif
