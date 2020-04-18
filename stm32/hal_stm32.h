@@ -1,3 +1,4 @@
+// Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
 // Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 //
 // This file is subject to the terms and conditions defined in file 'LICENSE',
@@ -60,7 +61,6 @@ typedef struct {
 void pd_init (void);
 bool pd_verify (void);
 
-void usart_init (void);
 void usart_irq (void);
 
 void i2c_irq (void);

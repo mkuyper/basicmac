@@ -450,6 +450,8 @@ void sha256 (uint32_t* hash, const uint8_t* msg, uint32_t len) {
 // ------------------------------------------------
 // UART
 
+#if 0
+
 enum {
     UART_READREG = 0,
     UART_WRITE,
@@ -524,6 +526,8 @@ static void usart_handler (void) {
         }
     }
 }
+
+#endif
 
 // ------------------------------------------------
 // Programmable I/O
@@ -627,7 +631,9 @@ void pio_irq_clear (uint32_t mask) {
 
 static uint32_t irqvector[16] = {
     (uint32_t) pio_handler,
+#if 0
     (uint32_t) usart_handler,
+#endif
 };
 
 void hal_reboot (void) {

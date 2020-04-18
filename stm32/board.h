@@ -1,3 +1,4 @@
+// Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
 // Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 //
 // This file is subject to the terms and conditions defined in file 'LICENSE',
@@ -34,6 +35,12 @@
 #define PORT_A	0
 #define PORT_B	1
 #define PORT_C	2
+
+// macros to define DMA channels
+#define BRD_DMA_CHAN(a)                 (a)
+#define BRD_DMA_CHANS(a,b)              (((b) << 4) | (a))
+#define BRD_DMA_CHAN_A(x)               (((x) & 0xf) - 1)
+#define BRD_DMA_CHAN_B(x)               ((((x) >> 4) & 0xf) - 1)
 
 
 #ifdef BRD_IMPL_INC

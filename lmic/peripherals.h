@@ -1,3 +1,4 @@
+// Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
 // Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 //
 // This file is subject to the terms and conditions defined in file 'LICENSE',
@@ -38,9 +39,10 @@ enum {
 
 typedef int (*usart_rx_func) (int ch, void* arg);
 typedef int (*usart_tx_func) (int status, void* arg);
-void usart_cfg (unsigned int br);
-void usart_recv (usart_rx_func rx, void* arg);
-void usart_send (usart_tx_func tx, void* arg);
+void usart_start (unsigned int br);
+void usart_stop (void);
+void usart_send (void* src, int n, osjob_t* job, osjobcb_t cb);
+void usart_recv (void* dst, int* n, ostime_t timeout, osjob_t* job, osjobcb_t cb);
 void usart_abort_recv (void);
 
 #endif
