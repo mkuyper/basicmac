@@ -64,9 +64,11 @@ void dma_config (unsigned int ch, unsigned int peripheral, unsigned int ccr, uns
     }
 }
 
-void dma_deconfig (unsigned int ch) {
+int dma_deconfig (unsigned int ch) {
+    int n = DMACHAN(ch)->CNDTR;
     DMACHAN(ch)->CCR = 0;
     dma_off(ch);
+    return n;
 }
 
 void dma_transfer (unsigned int ch, volatile void* paddr, void* maddr, int n) {

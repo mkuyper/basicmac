@@ -95,7 +95,7 @@ static void rx_on (void) {
     CFG_PIN_AF(GPIO_USART_RX, GPIOCFG_OSPEED_40MHz | GPIOCFG_OTYPE_PUPD | GPIOCFG_PUPD_NONE);
 }
 
-static void rx_off (void) {
+static int rx_off (void) {
     // deconfigure I/O line
     CFG_PIN_DEFAULT(GPIO_USART_RX);
     // disable DMA
@@ -103,9 +103,11 @@ static void rx_off (void) {
     // disable receiver and interrupts
     USARTx->CR1 &= ~USART_CR1_RE;
     // deconfigure DMA
-    dma_deconfig(DMA_CHAN_RX);
+    int n = dma_deconfig(DMA_CHAN_RX);
     // turn off usart
     usart_off(RX_ON);
+    // return remaining bytes
+    return n;
 }
 
 static void tx_on (void) {
@@ -156,7 +158,7 @@ void usart_send (void* src, int n, osjob_t* job, osjobcb_t cb) {
 }
 
 static void rx_done (void) {
-    rx_off();
+    *usart.rx.pn -= rx_off();
     os_setCallback(usart.rx.job, usart.rx.cb);
 }
 
@@ -164,44 +166,30 @@ static void rx_dma_cb (int status) {
     rx_done();
 }
 
+static void rx_timeout (osjob_t* job) {
+    usart_abort_recv();
+}
+
+void usart_abort_recv (void) {
+    hal_disableIRQs();
+    rx_done();
+    hal_enableIRQs();
+}
+
 void usart_recv (void* dst, int* n, ostime_t timeout, osjob_t* job, osjobcb_t cb) {
     usart.rx.job = job;
     usart.rx.cb = cb;
     usart.rx.pn = n;
 
-    // TODO: setup timeout
+    os_setTimedCallback(usart.rx.job, os_getTime() + timeout, rx_timeout);
 
     rx_on();
     dma_transfer(DMA_CHAN_RX, &USARTx->RDR, dst, *n);
 }
 
-
 void usart_irq (void) {
     unsigned int isr = USARTx->ISR;
     unsigned int cr1 = USARTx->CR1;
-#if 0
-    if (cr1 & USART_CR1_RXNEIE) {
-        if (isr & USART_ISR_ORE) {
-            USARTx->ICR |= USART_ISR_ORE;
-            rx_off();
-            usart.rx(USART_ERROR, usart.rxarg);
-        } else if (isr & USART_ISR_RXNE) {
-            if (usart.rx(USARTx->RDR, usart.rxarg) != USART_CONTINUE) { // done
-                rx_off();
-            }
-        }
-    }
-    if ((cr1 & USART_CR1_TXEIE) && (isr & USART_ISR_TXE)) {
-        int ch;
-        if ((ch = usart.tx(USART_CONTINUE, usart.txarg)) < 0) { // done
-            unsigned int cr1 = USARTx->CR1;
-            cr1 = (cr1 & ~USART_CR1_TXEIE) | USART_CR1_TCIE;
-            USARTx->CR1 = cr1;
-        } else {
-            USARTx->TDR = ch;
-        }
-    }
-#endif
     if( (cr1 & USART_CR1_TCIE) && (isr & USART_ISR_TC) ) {
         tx_off();
         os_setCallback(usart.tx.job, usart.tx.cb);

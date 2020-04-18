@@ -362,7 +362,7 @@ enum {
     DMA_CB_COMPLETE = (1 << 1),
 };
 void dma_config (unsigned int ch, unsigned int peripheral, unsigned int ccr, unsigned int flags, void (*callback) (int));
-void dma_deconfig (unsigned int ch);
+int dma_deconfig (unsigned int ch);
 void dma_transfer (unsigned int ch, volatile void* paddr, void* maddr, int n);
 
 void dma_irq (void);
