@@ -1,3 +1,4 @@
+// Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
 // Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 // Copyright (C) 2014-2016 IBM Corporation. All rights reserved.
 //
@@ -215,7 +216,10 @@ int gpio_transition (int port, int pin, int type, int duration, unsigned int con
 // ------------------------------------------------
 // USART
 
+#ifdef BRD_USART
+
 #define PERIPH_USART
+#define HW_DMA
 
 #if (BRD_USART & BRD_LPUART(0)) == 0
 #define USART_BR_9600	0xd05
@@ -223,6 +227,8 @@ int gpio_transition (int port, int pin, int type, int duration, unsigned int con
 #else
 #define USART_BR_9600	0xd0555
 #define USART_BR_115200	0x115c7
+#endif
+
 #endif
 
 
@@ -339,6 +345,28 @@ void ir_tim_irq (void);
 
 #if defined(STM32L072xx)
 #define PERIPH_TRNG
+#endif
+
+
+//////////////////////////////////////////////////////////////////////
+// DMA
+//////////////////////////////////////////////////////////////////////
+
+#ifdef HW_DMA
+
+enum {
+    DMA_USART1  = 3,
+};
+enum {
+    DMA_CB_HALF     = (1 << 0),
+    DMA_CB_COMPLETE = (1 << 1),
+};
+void dma_config (unsigned int ch, unsigned int peripheral, unsigned int ccr, unsigned int flags, void (*callback) (int));
+void dma_deconfig (unsigned int ch);
+void dma_transfer (unsigned int ch, volatile void* paddr, void* maddr, int n);
+
+void dma_irq (void);
+
 #endif
 
 

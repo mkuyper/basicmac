@@ -41,8 +41,8 @@ typedef int (*usart_rx_func) (int ch, void* arg);
 typedef int (*usart_tx_func) (int status, void* arg);
 void usart_start (unsigned int br);
 void usart_stop (void);
-void usart_recv (usart_rx_func rx, void* arg);
-void usart_send (usart_tx_func tx, void* arg);
+void usart_send (void* src, int n, osjob_t* job, osjobcb_t cb);
+void usart_recv (void* dst, int* n, ostime_t timeout, osjob_t* job, osjobcb_t cb);
 void usart_abort_recv (void);
 
 #endif

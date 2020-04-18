@@ -1089,6 +1089,12 @@ const irqdef HAL_irqdefs[] = {
     { TIM2_IRQn, ir_tim_irq },
 #endif
 
+#if defined(HW_DMA)
+    { DMA1_Channel1_IRQn, dma_irq },
+    { DMA1_Channel2_3_IRQn, dma_irq },
+    { DMA1_Channel4_5_6_7_IRQn, dma_irq },
+#endif
+
     { ~0, NULL } // end of list
 };
 

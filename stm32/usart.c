@@ -9,47 +9,54 @@
 #ifdef BRD_USART
 
 #if BRD_USART == 1
-#define USARTx			USART1
-#define USARTx_enable()		do { RCC->APB2ENR |= RCC_APB2ENR_USART1EN; } while (0)
-#define USARTx_disable()	do { RCC->APB2ENR &= ~RCC_APB2ENR_USART1EN; } while (0)
-#define USARTx_IRQn		USART1_IRQn
+#define USARTx                  USART1
+#define USARTx_enable()         do { RCC->APB2ENR |= RCC_APB2ENR_USART1EN; } while (0)
+#define USARTx_disable()        do { RCC->APB2ENR &= ~RCC_APB2ENR_USART1EN; } while (0)
+#define USARTx_IRQn             USART1_IRQn
+#define DMA_USARTx              DMA_USART1
+#define DMA_CHAN_TX             (2-1) // channel 2
+#define DMA_CHAN_RX             (3-1) // channel 3
 #elif BRD_USART == BRD_LPUART(1)
-#define USARTx			LPUART1
-#define USARTx_enable()		do { RCC->APB1ENR |= RCC_APB1ENR_LPUART1EN; } while (0)
-#define USARTx_disable()	do { RCC->APB1ENR &= ~RCC_APB1ENR_LPUART1EN; } while (0)
-#define USARTx_IRQn		LPUART1_IRQn
+#define USARTx                  LPUART1
+#define USARTx_enable()         do { RCC->APB1ENR |= RCC_APB1ENR_LPUART1EN; } while (0)
+#define USARTx_disable()        do { RCC->APB1ENR &= ~RCC_APB1ENR_LPUART1EN; } while (0)
+#define USARTx_IRQn             LPUART1_IRQn
+#else
+#error "Unsupported USART"
 #endif
 
 enum {
-    RX_ON	= (1 << 0),
-    TX_ON	= (1 << 1),
+    RX_ON       = (1 << 0),
+    TX_ON       = (1 << 1),
 };
 
 static struct {
     unsigned int on;
-
     unsigned int br;
-
-    usart_rx_func rx;
-    void* rxarg;
-
-    usart_tx_func tx;
-    void* txarg;
+    struct {
+        osjob_t* job;
+        osjobcb_t cb;
+    } tx;
+    struct {
+        osjob_t* job;
+        osjobcb_t cb;
+        int* pn;
+    } rx;
 } usart;
 
 static void usart_on (unsigned int flag) {
     hal_disableIRQs();
     if (usart.on == 0) {
-	// disable sleep (keep clock at full speed during transfer
+        // disable sleep (keep clock at full speed during transfer
         hal_setMaxSleep(HAL_SLEEP_S0);
-	// enable peripheral clock
-	USARTx_enable();
-	// set baudrate
-	USARTx->BRR = usart.br;
-	// usart enable
-	USARTx->CR1 = USART_CR1_UE;
-	// enable interrupts in NVIC
-	NVIC_EnableIRQ(USARTx_IRQn);
+        // enable peripheral clock
+        USARTx_enable();
+        // set baudrate
+        USARTx->BRR = usart.br;
+        // usart enable
+        USARTx->CR1 = USART_CR1_UE;
+        // enable interrupts in NVIC
+        NVIC_EnableIRQ(USARTx_IRQn);
     }
     usart.on |= flag;
     hal_enableIRQs();
@@ -59,38 +66,44 @@ static void usart_off (unsigned int flag) {
     hal_disableIRQs();
     usart.on &= ~flag;
     if (usart.on == 0) {
-	// disable USART
-	USARTx->CR1 = 0;
-	// disable peripheral clock
-	USARTx_disable();
-	// disable interrupts in NVIC
-	NVIC_DisableIRQ(USARTx_IRQn);
-	// re-enable sleep
+        // disable USART
+        USARTx->CR1 = 0;
+        // disable peripheral clock
+        USARTx_disable();
+        // disable interrupts in NVIC
+        NVIC_DisableIRQ(USARTx_IRQn);
+        // re-enable sleep
         hal_clearMaxSleep(HAL_SLEEP_S0);
     }
     hal_enableIRQs();
 }
 
-static void rx_on (unsigned int noirq) {
+static void rx_dma_cb (int status); // fwd decl
+
+static void rx_on (void) {
     // turn on usart
     usart_on(RX_ON);
+    // flush data
+    USARTx->RQR |= USART_RQR_RXFRQ;
+    // configure DMA
+    dma_config(DMA_CHAN_RX, DMA_USART1, DMA_CCR_MINC | DMA_CCR_PSIZE_1, DMA_CB_COMPLETE, rx_dma_cb);
+    // enable DMA
+    USARTx->CR3 |= USART_CR3_DMAR;
     // enable receiver
     USARTx->CR1 |= USART_CR1_RE;
     // setup I/O line
     CFG_PIN_AF(GPIO_USART_RX, GPIOCFG_OSPEED_40MHz | GPIOCFG_OTYPE_PUPD | GPIOCFG_PUPD_NONE);
-    if (noirq == 0) {
-	// flush data, clear ORE and enable receive interrupt
-	USARTx->RQR |= USART_RQR_RXFRQ;
-	USARTx->ICR |= USART_ISR_ORE;
-	USARTx->CR1 |= USART_CR1_RXNEIE;
-    }
 }
 
 static void rx_off (void) {
     // deconfigure I/O line
     CFG_PIN_DEFAULT(GPIO_USART_RX);
+    // disable DMA
+    USARTx->CR3 &= ~USART_CR3_DMAR;
     // disable receiver and interrupts
-    USARTx->CR1 &= ~(USART_CR1_RE | USART_CR1_RXNEIE);
+    USARTx->CR1 &= ~USART_CR1_RE;
+    // deconfigure DMA
+    dma_deconfig(DMA_CHAN_RX);
     // turn off usart
     usart_off(RX_ON);
 }
@@ -102,15 +115,24 @@ static void tx_on (void) {
     USARTx->CR1 |= USART_CR1_TE;
     // setup I/O line
     CFG_PIN_AF(GPIO_USART_TX, GPIOCFG_OSPEED_40MHz | GPIOCFG_OTYPE_PUPD | GPIOCFG_PUPD_NONE);
-    // enable interrupt
-    USARTx->CR1 |= USART_CR1_TXEIE;
+    // configure DMA
+    dma_config(DMA_CHAN_TX, DMA_USART1, DMA_CCR_MINC | DMA_CCR_DIR | DMA_CCR_PSIZE_1, 0, NULL);
+    // enable DMA
+    USARTx->CR3 |= USART_CR3_DMAT;
+    // clear and enable interrupt
+    USARTx->ICR = USART_ICR_TCCF;
+    USARTx->CR1 |= USART_CR1_TCIE;
 }
 
 static void tx_off (void) {
     // deconfigure I/O line, activate pullup
     CFG_PIN(GPIO_USART_TX, GPIOCFG_MODE_INP | GPIOCFG_OSPEED_400kHz | GPIOCFG_OTYPE_OPEN | GPIOCFG_PUPD_PUP);
+    // disable DMA
+    USARTx->CR3 &= ~USART_CR3_DMAT;
     // disable receiver and interrupts
-    USARTx->CR1 &= ~(USART_CR1_TE | USART_CR1_TXEIE);
+    USARTx->CR1 &= ~(USART_CR1_TE | USART_CR1_TCIE);
+    // deconfigure DMA
+    dma_deconfig(DMA_CHAN_TX);
     // turn off usart
     usart_off(TX_ON);
 }
@@ -125,78 +147,65 @@ void usart_stop (void) {
     CFG_PIN_DEFAULT(GPIO_USART_TX);
 }
 
-void usart_recv (usart_rx_func rx, void* arg) {
-    usart.rx = rx;
-    usart.rxarg = arg;
-    rx_on(0);
-}
+void usart_send (void* src, int n, osjob_t* job, osjobcb_t cb) {
+    usart.tx.job = job;
+    usart.tx.cb = cb;
 
-void usart_abort_recv (void) {
-    hal_disableIRQs();
-    if (usart.on & RX_ON) {
-	rx_off();
-	usart.rx(USART_ERROR, usart.rxarg);
-    }
-    hal_enableIRQs();
-}
-
-void usart_send (usart_tx_func tx, void* arg) {
-    usart.tx = tx;
-    usart.txarg = arg;
     tx_on();
+    dma_transfer(DMA_CHAN_TX, &USARTx->TDR, src, n);
 }
+
+static void rx_done (void) {
+    rx_off();
+    os_setCallback(usart.rx.job, usart.rx.cb);
+}
+
+static void rx_dma_cb (int status) {
+    rx_done();
+}
+
+void usart_recv (void* dst, int* n, ostime_t timeout, osjob_t* job, osjobcb_t cb) {
+    usart.rx.job = job;
+    usart.rx.cb = cb;
+    usart.rx.pn = n;
+
+    // TODO: setup timeout
+
+    rx_on();
+    dma_transfer(DMA_CHAN_RX, &USARTx->RDR, dst, *n);
+}
+
 
 void usart_irq (void) {
     unsigned int isr = USARTx->ISR;
     unsigned int cr1 = USARTx->CR1;
+#if 0
     if (cr1 & USART_CR1_RXNEIE) {
-	if (isr & USART_ISR_ORE) {
-	    USARTx->ICR |= USART_ISR_ORE;
-	    rx_off();
-	    usart.rx(USART_ERROR, usart.rxarg);
-	} else if (isr & USART_ISR_RXNE) {
-	    if (usart.rx(USARTx->RDR, usart.rxarg) != USART_CONTINUE) { // done
-		rx_off();
-	    }
-	}
+        if (isr & USART_ISR_ORE) {
+            USARTx->ICR |= USART_ISR_ORE;
+            rx_off();
+            usart.rx(USART_ERROR, usart.rxarg);
+        } else if (isr & USART_ISR_RXNE) {
+            if (usart.rx(USARTx->RDR, usart.rxarg) != USART_CONTINUE) { // done
+                rx_off();
+            }
+        }
     }
     if ((cr1 & USART_CR1_TXEIE) && (isr & USART_ISR_TXE)) {
-	int ch;
-	if ((ch = usart.tx(USART_CONTINUE, usart.txarg)) < 0) { // done
-	    unsigned int cr1 = USARTx->CR1;
-	    cr1 = (cr1 & ~USART_CR1_TXEIE) | USART_CR1_TCIE;
-	    USARTx->CR1 = cr1;
-	} else {
-	    USARTx->TDR = ch;
-	}
+        int ch;
+        if ((ch = usart.tx(USART_CONTINUE, usart.txarg)) < 0) { // done
+            unsigned int cr1 = USARTx->CR1;
+            cr1 = (cr1 & ~USART_CR1_TXEIE) | USART_CR1_TCIE;
+            USARTx->CR1 = cr1;
+        } else {
+            USARTx->TDR = ch;
+        }
     }
-    if ((cr1 & USART_CR1_TCIE) && (isr & USART_ISR_TC)) {
-	USARTx->CR1 &= ~USART_CR1_TCIE;
-	tx_off();
-	usart.tx(USART_DONE, usart.txarg);
+#endif
+    if( (cr1 & USART_CR1_TCIE) && (isr & USART_ISR_TC) ) {
+        tx_off();
+        os_setCallback(usart.tx.job, usart.tx.cb);
     }
-}
-
-int usart_wait_silence (int silence_ticks, int timeout_ticks) {
-    ostime_t deadline = os_getTime() + timeout_ticks;
-    ostime_t threshold = os_getTime() + silence_ticks;
-    int retval = 0;
-    rx_on(1);
-    while (1) {
-	if (USARTx->ISR & USART_ISR_BUSY) {
-	    threshold = os_getTime() + silence_ticks;
-	}
-	if ((deadline - os_getTime()) < 0) {
-	    retval = -1;
-	    break;
-	}
-	if ((threshold - os_getTime()) < 0) {
-	    retval = 0;
-	    break;
-	}
-    }
-    rx_off();
-    return retval;
 }
 
 #endif
