@@ -12,43 +12,68 @@ static struct {
     } chan[7];
 } dma;
 
+// NOTE: We use a 0-based index for DMA channels, while the STM32 numbers them
+// starting at 1. Thus, ch=0 refers to DMA channel 1, etc.
+
+#define MASK_BIT(ch)    (1 << ((ch)-1))
+#define MASK_CH1        MASK_BIT(1)
+#define MASK_CH23       (MASK_BIT(2) | MASK_BIT(3))
+#define MASK_CH4567     (MASK_BIT(4) | MASK_BIT(5) | MASK_BIT(6) | MASK_BIT(7))
+
+static void ch_mask_irqn (unsigned int ch, unsigned int* mask, int* irqn) {
+    if( ch == 0 ) {
+        *mask = MASK_CH1;
+        *irqn = DMA1_Channel1_IRQn;
+    } else if( ch < 3 ) {
+        *mask = MASK_CH23;
+        *irqn = DMA1_Channel2_3_IRQn;
+    } else {
+        *mask = MASK_CH4567;
+        *irqn = DMA1_Channel4_5_6_7_IRQn;
+    }
+}
+
+static void irq_on (unsigned int ch) {
+    unsigned int mask;
+    int irqn;
+    ch_mask_irqn(ch, &mask, &irqn);
+    // enable IRQ if no channel is active yet in block
+    if( (dma.active & mask) == 0 ) {
+        NVIC_EnableIRQ(irqn);
+    }
+}
+
+static void irq_off (unsigned int ch) {
+    unsigned int mask;
+    int irqn;
+    ch_mask_irqn(ch, &mask, &irqn);
+    // disable IRQ if no channel is active anymore in block
+    if( (dma.active & mask) == 0 ) {
+        NVIC_DisableIRQ(irqn);
+    }
+}
+
 static void dma_on (unsigned int ch) {
     hal_disableIRQs();
     if( dma.active == 0 ) {
         RCC->AHBENR |= RCC_AHBENR_DMA1EN;
     }
+    irq_on(ch);
     dma.active |= (1 << ch);
-    if( (dma.active & 0x01) ) {
-        NVIC_EnableIRQ(DMA1_Channel1_IRQn);
-    }
-    if( (dma.active & (0x02|0x04)) ) {
-        NVIC_EnableIRQ(DMA1_Channel2_3_IRQn);
-    }
-    if( (dma.active & (0x08|0x10|0x20|0x40)) ) {
-        NVIC_EnableIRQ(DMA1_Channel4_5_6_7_IRQn);
-    }
     hal_enableIRQs();
 }
 
 static void dma_off (unsigned int ch) {
     hal_disableIRQs();
     dma.active &= ~(1 << ch);
-    if( (dma.active & 0x01) == 0 ) {
-        NVIC_DisableIRQ(DMA1_Channel1_IRQn);
-    }
-    if( (dma.active & (0x02|0x04)) == 0 ) {
-        NVIC_DisableIRQ(DMA1_Channel2_3_IRQn);
-    }
-    if( (dma.active & (0x08|0x10|0x20|0x40)) == 0 ) {
-        NVIC_DisableIRQ(DMA1_Channel4_5_6_7_IRQn);
-    }
+    irq_off(ch);
     if( dma.active == 0 ) {
         RCC->AHBENR &= ~RCC_AHBENR_DMA1EN;
     }
     hal_enableIRQs();
 }
 
-#define DMACHAN(n) ((DMA_Channel_TypeDef*)(DMA1_Channel1_BASE + (n) * (DMA1_Channel2_BASE-DMA1_Channel1_BASE)))
+#define DMACHAN(ch) ((DMA_Channel_TypeDef*)(DMA1_Channel1_BASE + (ch) * (DMA1_Channel2_BASE-DMA1_Channel1_BASE)))
 
 void dma_config (unsigned int ch, unsigned int peripheral, unsigned int ccr, unsigned int flags, void (*callback) (int)) {
     dma.chan[ch].callback = callback;
