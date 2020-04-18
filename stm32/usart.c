@@ -14,16 +14,18 @@
 #define USARTx_disable()        do { RCC->APB2ENR &= ~RCC_APB2ENR_USART1EN; } while (0)
 #define USARTx_IRQn             USART1_IRQn
 #define DMA_USARTx              DMA_USART1
-#define DMA_CHAN_TX             (2-1) // channel 2
-#define DMA_CHAN_RX             (3-1) // channel 3
 #elif BRD_USART == BRD_LPUART(1)
 #define USARTx                  LPUART1
 #define USARTx_enable()         do { RCC->APB1ENR |= RCC_APB1ENR_LPUART1EN; } while (0)
 #define USARTx_disable()        do { RCC->APB1ENR &= ~RCC_APB1ENR_LPUART1EN; } while (0)
 #define USARTx_IRQn             LPUART1_IRQn
+#define DMA_USARTx              DMA_LPUART1
 #else
 #error "Unsupported USART"
 #endif
+
+#define DMA_CHAN_TX             BRD_DMA_CHAN_A(BRD_USART_DMA)
+#define DMA_CHAN_RX             BRD_DMA_CHAN_B(BRD_USART_DMA)
 
 enum {
     RX_ON       = (1 << 0),

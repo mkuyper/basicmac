@@ -1,3 +1,4 @@
+// Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
 // Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 //
 // This file is subject to the terms and conditions defined in file 'LICENSE',
@@ -64,6 +65,7 @@
 #define BRD_PERSO_UART	2
 
 #define BRD_USART	BRD_LPUART(1)
+#define BRD_USART_DMA   BRD_DMA_CHANS(2,3)
 #define GPIO_USART_TX	BRD_GPIO_AF(PORT_C, 4, 2)
 #define GPIO_USART_RX	BRD_GPIO_AF(PORT_C, 5, 2)
 
@@ -125,6 +127,7 @@
 #define BRD_DBG_UART	2
 
 #define BRD_USART	1
+#define BRD_USART_DMA   BRD_DMA_CHANS(2,3)
 #define GPIO_USART_TX	BRD_GPIO_AF(PORT_A, 9, 4)
 #define GPIO_USART_RX	BRD_GPIO_AF(PORT_A, 10, 4)
 
