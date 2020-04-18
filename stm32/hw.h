@@ -355,7 +355,22 @@ void ir_tim_irq (void);
 #ifdef HW_DMA
 
 enum {
+    DMA_ADC     = 0,
+    DMA_SPI1    = 1,
+    DMA_SPI2    = 2,
     DMA_USART1  = 3,
+    DMA_USART2  = 4,
+    DMA_LPUART1 = 5,
+    DMA_I2C1    = 6,
+    DMA_I2C2    = 7,
+    DMA_TIM2    = 8,
+    DMA_TIM6    = 9,
+    DMA_TIM4    = 10,
+    DMA_AES     = 11,
+    DMA_USART4  = 12,
+    DMA_USART5  = 13,
+    DMA_I2C3    = 14,
+    DMA_TIM7    = 15,
 };
 enum {
     DMA_CB_HALF     = (1 << 0),

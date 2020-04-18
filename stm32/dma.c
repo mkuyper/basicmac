@@ -19,13 +19,13 @@ static void dma_on (unsigned int ch) {
     }
     dma.active |= (1 << ch);
     if( (dma.active & 0x01) ) {
-	NVIC_EnableIRQ(DMA1_Channel1_IRQn);
+        NVIC_EnableIRQ(DMA1_Channel1_IRQn);
     }
     if( (dma.active & (0x02|0x04)) ) {
-	NVIC_EnableIRQ(DMA1_Channel2_3_IRQn);
+        NVIC_EnableIRQ(DMA1_Channel2_3_IRQn);
     }
     if( (dma.active & (0x08|0x10|0x20|0x40)) ) {
-	NVIC_EnableIRQ(DMA1_Channel4_5_6_7_IRQn);
+        NVIC_EnableIRQ(DMA1_Channel4_5_6_7_IRQn);
     }
     hal_enableIRQs();
 }
@@ -34,13 +34,13 @@ static void dma_off (unsigned int ch) {
     hal_disableIRQs();
     dma.active &= ~(1 << ch);
     if( (dma.active & 0x01) == 0 ) {
-	NVIC_DisableIRQ(DMA1_Channel1_IRQn);
+        NVIC_DisableIRQ(DMA1_Channel1_IRQn);
     }
     if( (dma.active & (0x02|0x04)) == 0 ) {
-	NVIC_DisableIRQ(DMA1_Channel2_3_IRQn);
+        NVIC_DisableIRQ(DMA1_Channel2_3_IRQn);
     }
     if( (dma.active & (0x08|0x10|0x20|0x40)) == 0 ) {
-	NVIC_DisableIRQ(DMA1_Channel4_5_6_7_IRQn);
+        NVIC_DisableIRQ(DMA1_Channel4_5_6_7_IRQn);
     }
     if( dma.active == 0 ) {
         RCC->AHBENR &= ~RCC_AHBENR_DMA1EN;
@@ -68,6 +68,7 @@ int dma_deconfig (unsigned int ch) {
     int n = DMACHAN(ch)->CNDTR;
     DMACHAN(ch)->CCR = 0;
     dma_off(ch);
+    // return remaning bytes
     return n;
 }
 
