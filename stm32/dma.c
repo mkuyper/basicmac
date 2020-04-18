@@ -5,6 +5,8 @@
 
 #include "hw.h"
 
+#ifdef HW_DMA
+
 static struct {
     unsigned int active;
     struct {
@@ -118,3 +120,5 @@ void dma_irq (void) {
         }
     }
 }
+
+#endif
