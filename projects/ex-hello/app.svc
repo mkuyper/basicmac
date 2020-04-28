@@ -1,0 +1,6 @@
+hook.appstart: app_main
+
+require:
+    - appstart
+
+# vim: syntax=yaml
