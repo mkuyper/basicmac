@@ -1,3 +1,4 @@
+# Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
 # Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 #
 # This file is subject to the terms and conditions defined in file 'LICENSE',
@@ -54,4 +55,12 @@ ifneq (,$(filter b_l072z_lrwan1,$(FAMILIES)))
     DEFS	+= -DBRD_IMPL_INC='"brd_devboards.h"'
     OOCFGS	+= $(TOOLSDIR)/openocd/nucleo-l0.cfg
     BL_BRD	:= B-L072Z-LRWAN1
+endif
+
+ifneq (,$(filter wrl13990,$(FAMILIES)))
+    MCU		:= NRF52832
+    LD_SCRIPTS	+= $(BL)/src/arm/nrf5/ld/nrf52832_xxaa.ld
+    DEFS	+= -DBRD_IMPL_INC='"brd_devboards.h"'
+    OOCFGS	+= $(TOOLSDIR)/openocd/nrf52.cfg
+    BL_BRD	:= WRL-13990
 endif

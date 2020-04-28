@@ -1,3 +1,4 @@
+# Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
 # Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 #
 # This file is subject to the terms and conditions defined in file 'LICENSE',
@@ -67,6 +68,30 @@ ifeq ($(MCU),unicorn)
     ALL		+= $(BUILDDIR)/$(PROJECT).hex
     LOAD	 = dummy
     OBJS_BLACKLIST += radio.o
+endif
+
+ifeq ($(MCU:NRF5%=NRF5),NRF5)
+    TOOLCHAIN	:= gcc
+    CROSS_COMPILE:=arm-none-eabi-
+    CFLAGS	+= -fno-common -fno-builtin -fno-exceptions -ffunction-sections -fdata-sections -fomit-frame-pointer
+    HALDIR	:= $(TOPDIR)/nrf5
+    NRFX	:= $(TOPDIR)/nrf5/nrfx
+    CMSIS	:= $(TOPDIR)/nrf5/cmsis
+    CFLAGS	+= -I$(CMSIS)/include
+    CFLAGS	+= -I$(BL)/src/common
+    CFLAGS	+= -I$(BL)/src/arm/nrf5
+    CFLAGS	+= -DHAL_IMPL_INC=\"hal_nrf5.h\"
+    LDFLAGS	+= -nostartfiles
+    LDFLAGS	+= $(addprefix -T,$(LD_SCRIPTS))
+    OOCFGS	+= $(TOOLSDIR)/openocd/flash.cfg
+ifeq ($(MCU:NRF52%=NRF52),NRF52)
+    FLAGS	+= -mcpu=cortex-m4 -mthumb
+    LD_SCRIPTS	+= $(HALDIR)/fw.ld
+endif
+    ALL		+= $(BUILDDIR)/$(PROJECT).hex
+    ALL		+= $(BUILDDIR)/$(PROJECT).bin
+    ALL		+= $(BUILDDIR)/$(PROJECT).zfw
+    LOAD	 = loadhex
 endif
 
 

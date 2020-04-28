@@ -4,3 +4,6 @@
 [submodule "services/fuota/micro-ecc"]
 	path = services/micro-ecc
 	url = https://github.com/kmackay/micro-ecc.git
+[submodule "nrf5/nrfx"]
+	path = nrf5/nrfx
+	url = https://github.com/NordicSemiconductor/nrfx.git
