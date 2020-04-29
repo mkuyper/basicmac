@@ -58,8 +58,9 @@ ifneq (,$(filter b_l072z_lrwan1,$(FAMILIES)))
 endif
 
 ifneq (,$(filter wrl13990,$(FAMILIES)))
-    MCU		:= NRF52832
+    MCU		:= NRF52832_XXAA
     LD_SCRIPTS	+= $(BL)/src/arm/nrf5/ld/nrf52832_xxaa.ld
+    DEFS	+= -DCFG_wrl13990_board
     DEFS	+= -DBRD_IMPL_INC='"brd_devboards.h"'
     OOCFGS	+= $(TOOLSDIR)/openocd/nrf52.cfg
     BL_BRD	:= WRL-13990

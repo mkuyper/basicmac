@@ -77,9 +77,14 @@ ifeq ($(MCU:NRF5%=NRF5),NRF5)
     HALDIR	:= $(TOPDIR)/nrf5
     NRFX	:= $(TOPDIR)/nrf5/nrfx
     CMSIS	:= $(TOPDIR)/nrf5/cmsis
+    DEFS	+= -D$(MCU)
     CFLAGS	+= -I$(CMSIS)/include
+    CFLAGS	+= -I$(NRFX)
+    CFLAGS	+= -I$(NRFX)/mdk
+    CFLAGS	+= -I$(NRFX)/drivers/include
     CFLAGS	+= -I$(BL)/src/common
     CFLAGS	+= -I$(BL)/src/arm/nrf5
+    CFLAGS	+= -I$(BL)/src/arm/nrf5/softdevice/$(SOFTDEVICE)/headers
     CFLAGS	+= -DHAL_IMPL_INC=\"hal_nrf5.h\"
     LDFLAGS	+= -nostartfiles
     LDFLAGS	+= $(addprefix -T,$(LD_SCRIPTS))
@@ -88,10 +93,14 @@ ifeq ($(MCU:NRF52%=NRF52),NRF52)
     FLAGS	+= -mcpu=cortex-m4 -mthumb
     LD_SCRIPTS	+= $(HALDIR)/fw.ld
 endif
+ifeq ($(MCU:NRF52832%=NRF52832),NRF52832)
+    SOFTDEVICE	:= s132
+endif
     ALL		+= $(BUILDDIR)/$(PROJECT).hex
     ALL		+= $(BUILDDIR)/$(PROJECT).bin
     ALL		+= $(BUILDDIR)/$(PROJECT).zfw
     LOAD	 = loadhex
+    SRCS	+= nrfx/drivers/src/nrfx_uarte.c
 endif
 
 

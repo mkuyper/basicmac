@@ -16,6 +16,7 @@ CFLAGS += -Wall -Wno-main
 
 SVCS += app
 
+LMICCFG += noradio
 LMICCFG += eeprom_keys
 LMICCFG += eeprom_region
 LMICCFG += DEBUG

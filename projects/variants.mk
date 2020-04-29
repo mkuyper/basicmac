@@ -9,7 +9,7 @@ RVARIANT	:= $(VARIANT)
 
 ifeq ($(VARIANT),)
     VTARGET	:= variants
-    VARIANT	:= $(firstword $(DEFAULT_VARIANT) $(VARIANTS))
+    VARIANT	:= $(firstword $(findstring $(DEFAULT_VARIANT),$VARIANTS) $(VARIANTS))
 else
     VTARGET	:= all
 endif
