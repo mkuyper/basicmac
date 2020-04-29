@@ -26,4 +26,6 @@
 #error "Missing radio configuration"
 #endif
 
+#define GPIO_DBG_TX     27
+
 #endif

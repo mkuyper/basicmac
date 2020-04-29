@@ -23,4 +23,6 @@ typedef struct {
 } irqdef;
 extern const irqdef HAL_irqdefs[];
 
+#define HAL_IRQ_PRIORITY        5
+
 #endif

@@ -9,6 +9,8 @@
 #include "bootloader.h"
 #include "boottab.h"
 
+#include "nrfx_uarte.h"
+
 // Important Note: This HAL is currently written for the nRF52832 with S132,
 // and assumptions may be made that do not hold true for other nRF5x MCUs and
 // SoftDevices.
@@ -55,10 +57,6 @@ void hal_failed () {
     // not reached
 }
 
-void hal_init (void* bootarg) {
-    HAL.boottab = bootarg;
-}
-
 void hal_watchcount (int cnt) {
     // TODO - implement
 }
@@ -90,8 +88,47 @@ u8_t hal_xticks (void) {
 void hal_waitUntil (u4_t time) {
 }
 
-void hal_debug_str (const char* str) {
+
+// -----------------------------------------------------------------------------
+// Debug
+
+static const nrfx_uarte_t debug_port = NRFX_UARTE_INSTANCE(0); // XXX
+
+static void debug_init (void) {
+    nrfx_uarte_config_t cfg = {
+        .pseltxd            = GPIO_DBG_TX,
+        .pselrxd            = NRF_UARTE_PSEL_DISCONNECTED,
+        .pselcts            = NRF_UARTE_PSEL_DISCONNECTED,
+        .pselrts            = NRF_UARTE_PSEL_DISCONNECTED,
+        .p_context          = NULL,
+        .baudrate           = NRF_UARTE_BAUDRATE_115200,
+        .interrupt_priority = HAL_IRQ_PRIORITY,
+        .hal_cfg            = {
+            .hwfc           = NRF_UARTE_HWFC_DISABLED,
+            .parity         = NRF_UARTE_PARITY_EXCLUDED,
+        }
+    };
+
+    nrfx_err_t rv;
+    rv = nrfx_uarte_init(&debug_port, &cfg, NULL);
+    ASSERT(rv == NRFX_SUCCESS);
 }
+
+static void debug_strbuf (const unsigned char* buf, int n) {
+    nrfx_uarte_tx(&debug_port, buf, n);
+}
+
+void hal_debug_str (const char* str) {
+    int n = strlen(str);
+    if( (uintptr_t) str < 0x2000000 || (uintptr_t) str > 0x20010000 ) {
+        unsigned char buf[n];
+        memcpy(buf, str, n);
+        debug_strbuf(buf, n);
+    } else {
+        debug_strbuf((const unsigned char*) str, n);
+    }
+}
+
 void hal_debug_led (int val) {
 }
 
@@ -116,6 +153,17 @@ u1_t* hal_serial (void) {
 u4_t  hal_hwid (void) {
     return 0;
 }
+
+
+// -----------------------------------------------------------------------------
+// HAL initialization
+
+void hal_init (void* bootarg) {
+    HAL.boottab = bootarg;
+
+    debug_init();
+}
+
 
 // -----------------------------------------------------------------------------
 // IRQ Handlers
