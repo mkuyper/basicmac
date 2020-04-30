@@ -72,10 +72,11 @@ endif
 
 ifeq ($(MCU:NRF5%=NRF5),NRF5)
     TOOLCHAIN	:= gcc
-    CROSS_COMPILE:=arm-none-eabi-
+    CROSS_COMPILE :=arm-none-eabi-
     CFLAGS	+= -fno-common -fno-builtin -fno-exceptions -ffunction-sections -fdata-sections -fomit-frame-pointer
     HALDIR	:= $(TOPDIR)/nrf5
     NRFX	:= $(TOPDIR)/nrf5/nrfx
+    NRFX_DRIVERS += clock rtc uarte
     CMSIS	:= $(TOPDIR)/nrf5/cmsis
     DEFS	+= -D$(MCU)
     CFLAGS	+= -I$(CMSIS)/include
@@ -96,11 +97,11 @@ endif
 ifeq ($(MCU:NRF52832%=NRF52832),NRF52832)
     SOFTDEVICE	:= s132
 endif
+    SRCS	+= $(foreach d,$(NRFX_DRIVERS),nrfx/drivers/src/nrfx_$(d).c)
     ALL		+= $(BUILDDIR)/$(PROJECT).hex
     ALL		+= $(BUILDDIR)/$(PROJECT).bin
     ALL		+= $(BUILDDIR)/$(PROJECT).zfw
     LOAD	 = loadhex
-    SRCS	+= nrfx/drivers/src/nrfx_uarte.c
 endif
 
 
