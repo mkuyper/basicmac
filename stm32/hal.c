@@ -624,20 +624,15 @@ u4_t hal_ticks () {
 }
 
 // NOTE: interrupts are already be disabled when this HAL function is called!
-u1_t hal_sleep (u1_t type, u4_t targettime) {
+void hal_sleep (u1_t type, u4_t targettime) {
     static const u8_t S_TH[] = {
         0, 6, 190
     };
 
     u8_t xnow = hal_xticks_unsafe();
-    s4_t dt;
-    if( type == HAL_SLEEP_FOREVER ) {
-        dt = sec2osticks(12*60*60); // 12 h
-    } else {
-        dt = (s4_t) targettime - (s4_t) xnow;
-    }
+    s4_t dt = (s4_t) targettime - (s4_t) xnow;
     if( dt <= 0 ) {
-        return 0; // it's time now
+        return; // it's time now
     }
 
     // select sleep type
@@ -672,8 +667,6 @@ u1_t hal_sleep (u1_t type, u4_t targettime) {
     HAL.rtstats.sleep[stype] += (t2 - t1);
     wakeup = t2;
 #endif
-
-    return 1; // we slept
 }
 
 // short-term busy wait

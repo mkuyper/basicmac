@@ -136,9 +136,9 @@ void hal_enableIRQs (void) {
     }
 }
 
-u1_t hal_sleep (u1_t type, u4_t targettime) {
+void hal_sleep (u1_t type, u4_t targettime) {
     sim.xnow_cached = -1;
-    return svc32(SVC_SLEEP, type, targettime, 0);
+    svc32(SVC_SLEEP, type, targettime, 0);
 }
 
 u4_t hal_ticks (void) {
