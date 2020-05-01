@@ -10,8 +10,9 @@
 #include "boottab.h"
 
 #include "nrfx_clock.h"
-#include "nrfx_uarte.h"
 #include "nrfx_rtc.h"
+#include "nrfx_spim.h"
+#include "nrfx_uarte.h"
 
 // Important Note: This HAL is currently written for the nRF52832 with S132,
 // and assumptions may be made that do not hold true for other nRF5x MCUs and
@@ -27,6 +28,22 @@ static struct {
 
     boot_boottab* boottab;
 } HAL;
+
+
+// -----------------------------------------------------------------------------
+// Things that should be in nrfx ;-)
+
+static inline bool nrfx_rtc_overflow_pending (nrfx_rtc_t const * p_instance) {
+    return nrf_rtc_event_check(p_instance->p_reg, NRF_RTC_EVENT_OVERFLOW);
+}
+
+static inline void nrfx_uarte_suspend (nrfx_uarte_t const * p_instance) {
+    nrf_uarte_disable(p_instance->p_reg);
+}
+
+static inline void nrfx_uarte_resume (nrfx_uarte_t const * p_instance) {
+    nrf_uarte_enable(p_instance->p_reg);
+}
 
 
 // -----------------------------------------------------------------------------
@@ -61,7 +78,7 @@ void hal_failed () {
 }
 
 void hal_watchcount (int cnt) {
-    // TODO - implement
+    // TODO - implement?
 }
 
 void hal_disableIRQs (void) {
@@ -92,11 +109,6 @@ static void clock_handler (nrfx_clock_evt_type_t event) {
     debug_printf("clock handler\r\n");
 }
 
-// this should be in nrfx.... ;-)
-static inline bool nrfx_rtc_overflow_pending (nrfx_rtc_t const * p_instance) {
-    return nrf_rtc_event_check(p_instance->p_reg, NRF_RTC_EVENT_OVERFLOW);
-}
-
 static void clock_init (void) {
     nrfx_rtc_config_t cfg = {
         .prescaler          = RTC_FREQ_TO_PRESCALER(32768),
@@ -116,22 +128,6 @@ static void clock_init (void) {
 
     nrfx_rtc_overflow_enable(&rtc1, true);
     nrfx_rtc_enable(&rtc1);
-}
-
-u1_t hal_sleep (u1_t type, u4_t targettime) {
-    if( targettime <= hal_ticks() ) {
-        return 0;
-    }
-
-    nrfx_err_t rv;
-    rv = nrfx_rtc_cc_set(&rtc1, 0, targettime & 0xffffff, true);
-    ASSERT(rv == NRFX_SUCCESS);
-
-    asm volatile("wfi");
-
-    rv = nrfx_rtc_cc_disable(&rtc1, 0);
-
-    return 1;
 }
 
 static uint64_t xticks_unsafe (void) {
@@ -157,6 +153,66 @@ u8_t hal_xticks (void) {
 }
 
 void hal_waitUntil (u4_t time) {
+    // busy wait until timestamp is reached
+    while( ((s4_t) time - (s4_t) hal_ticks()) > 0 );
+}
+
+void hal_setMaxSleep (unsigned int level) {
+}
+
+void hal_sleep (u1_t type, u4_t targettime) {
+    nrfx_err_t rv;
+    rv = nrfx_rtc_cc_set(&rtc1, 0, targettime & 0xffffff, true);
+    ASSERT(rv == NRFX_SUCCESS);
+
+    if( ((s4_t) xticks_unsafe()) - ((s4_t) targettime) < 0 ) {
+        // TODO - use softdevice if enabled
+        asm volatile("wfi");
+    }
+
+    nrfx_rtc_cc_disable(&rtc1, 0);
+}
+
+
+// -----------------------------------------------------------------------------
+// LoRaWAN glue
+u1_t hal_getBattLevel (void) {
+    return 0;
+}
+
+void hal_setBattLevel (u1_t level) {
+}
+
+u4_t hal_dnonce_next (void) {
+    return 0;
+}
+
+
+// -----------------------------------------------------------------------------
+// Radio SPI and antenna switching
+
+static const nrfx_spim_t radio_spi = NRFX_SPIM_INSTANCE(0);
+
+void hal_spi_select (int on) {
+}
+
+u1_t hal_spi (u1_t out) {
+}
+
+bool hal_pin_tcxo (u1_t val) {
+    return false;
+}
+
+void hal_ant_switch (u1_t val) {
+}
+
+void hal_pin_rst (u1_t val) {
+}
+
+void hal_pin_busy_wait (void) {
+}
+
+void hal_irqmask_set (int mask) {
 }
 
 
@@ -168,7 +224,7 @@ static const nrfx_uarte_t debug_port = NRFX_UARTE_INSTANCE(0); // XXX
 
 static void debug_init (void) {
     nrfx_uarte_config_t cfg = {
-        .pseltxd            = GPIO_DBG_TX,
+        .pseltxd            = BRD_GPIO_PIN(GPIO_DBG_TX),
         .pselrxd            = NRF_UARTE_PSEL_DISCONNECTED,
         .pselcts            = NRF_UARTE_PSEL_DISCONNECTED,
         .pselrts            = NRF_UARTE_PSEL_DISCONNECTED,
@@ -181,9 +237,10 @@ static void debug_init (void) {
         }
     };
 
-    nrfx_err_t rv;
-    rv = nrfx_uarte_init(&debug_port, &cfg, NULL);
-    ASSERT(rv == NRFX_SUCCESS);
+    if( nrfx_uarte_init(&debug_port, &cfg, NULL) != NRFX_SUCCESS ) {
+        hal_failed();
+    }
+    nrfx_uarte_suspend(&debug_port);
 
 #if CFG_DEBUG != 0
     debug_str("\r\n============== DEBUG STARTED ==============\r\n");
@@ -191,7 +248,9 @@ static void debug_init (void) {
 }
 
 static void debug_strbuf (const unsigned char* buf, int n) {
+    nrfx_uarte_resume(&debug_port);
     nrfx_uarte_tx(&debug_port, buf, n);
+    nrfx_uarte_suspend(&debug_port);
 }
 
 void hal_debug_str (const char* str) {
@@ -206,6 +265,13 @@ void hal_debug_str (const char* str) {
 }
 
 void hal_debug_led (int val) {
+#ifdef GPIO_DBG_LED
+    if( val ) {
+        pio_set(BRD_GPIO_PIN(GPIO_DBG_LED), (GPIO_DBG_LED & BRD_GPIO_ACTIVE_LOW) ? 0 : 1);
+    } else {
+        pio_default(BRD_GPIO_PIN(GPIO_DBG_LED));
+    }
+#endif
 }
 
 #endif
@@ -223,6 +289,14 @@ void hal_fwinfo (hal_fwi* fwi) {
 void os_getDevEui (u1_t* buf) {
     os_wlsbf4(buf, 0xdeafbeef);
     os_wlsbf4(buf+4, 0xdeafbeef);
+}
+void os_getNwkKey (u1_t* buf) {
+}
+void os_getJoinEui (u1_t* buf){
+}
+
+u1_t os_getRegion (void) {
+    return 0;
 }
 
 u1_t* hal_serial (void) {

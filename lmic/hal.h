@@ -81,13 +81,10 @@ void hal_enableIRQs (void);
 
 /*
  * put system and CPU in low-power mode, sleep until target time / interrupt.
- *   - return 0 if target time is close
- *   - otherwise sleep until target time / interrupt and return non-zero
  */
 #define HAL_SLEEP_EXACT		0
 #define HAL_SLEEP_APPROX	1
-#define HAL_SLEEP_FOREVER	2
-u1_t hal_sleep (u1_t type, u4_t targettime);
+void hal_sleep (u1_t type, u4_t targettime);
 
 /*
  * return 32-bit system time in ticks.

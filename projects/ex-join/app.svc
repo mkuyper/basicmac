@@ -4,9 +4,9 @@ hook.lwm_downlink: app_dl
 require:
     - appstart
     - lwmux
-    - lwtest
-    - frag
-    - fwman
-    - eckm
+#    - lwtest
+#    - frag
+#    - fwman
+#    - eckm
 
 # vim: syntax=yaml

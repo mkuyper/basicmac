@@ -17,15 +17,31 @@
 #define BRD_sx1262_radio
 #endif
 
-#define GPIO_DIO1       BRD_GPIO_AF_EX(PORT_B, 4, 4, BRD_GPIO_CHAN(1))
-#define GPIO_BUSY       BRD_GPIO(PORT_B, 3)
-#define GPIO_NSS        BRD_GPIO(PORT_A, 8)
-#define GPIO_TXRX_EN    BRD_GPIO(PORT_A, 9)
+#define GPIO_DIO1       1
+#define GPIO_BUSY       2
+#define GPIO_NSS        3
+#define GPIO_TXRX_EN    4
+
+#elif defined(CFG_sx1276mb1mas) || defined(CFG_sx1276mb1las)
+
+#define GPIO_SX_DIO0    1
+#define GPIO_SX_DIO1    2
+#define GPIO_SX_DIO2    3
+#define GPIO_SX_NSS     4
+#define GPIO_ANT_TX     5
+
+#define BRD_sx1276_radio
+#if defined(CFG_sx1276mb1las)
+#define BRD_PABOOSTSEL(f,p) true
+#else
+#define BRD_PABOOSTSEL(f,p) false
+#endif
 
 #else
 #error "Missing radio configuration"
 #endif
 
-#define GPIO_DBG_TX     27
+#define GPIO_DBG_LED    (7 | BRD_GPIO_ACTIVE_LOW)
+#define GPIO_DBG_TX     (27)
 
 #endif

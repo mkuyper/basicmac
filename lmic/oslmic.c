@@ -156,39 +156,28 @@ void os_setTimedCallbackEx (osjob_t* job, ostime_t time, osjobcb_t cb, unsigned 
     hal_enableIRQs();
 }
 
-// execute 1 job from timer or run queue, or sleep if nothing is pending
 void os_runstep (void) {
-    osjob_t* j = NULL;
-    hal_disableIRQs();
     // check for runnable jobs
-    if (OS.scheduledjobs) {
-	if (hal_sleep(OS.exact ? HAL_SLEEP_EXACT : HAL_SLEEP_APPROX, OS.scheduledjobs->deadline) == 0) {
-	    j = OS.scheduledjobs;
-	    OS.scheduledjobs = j->next;
-	    if ((j->flags & OSJOB_FLAG_APPROX) == 0) {
-		OS.exact -= 1;
-	    }
-	}
-    } else { // nothing pending
-	hal_sleep(HAL_SLEEP_FOREVER, 0);
+    hal_disableIRQs();
+    ostime_t now = os_getTime();
+    osjob_t* j = OS.scheduledjobs;
+    ostime_t deadline;
+    if( j ) {
+        deadline = j->deadline;
+        if( (deadline - now) <= 0 ) {
+	    OS.scheduledjobs = j->next; // de-queue
+            hal_enableIRQs();
+
+            hal_watchcount(30); // max 60 sec XXX
+            j->func(j);
+            hal_watchcount(0);
+            return;
+        }
+    } else {
+        deadline = now + 0x7fffff00;
     }
-    if( j == NULL || (j->flags & OSJOB_FLAG_IRQDISABLED) == 0) {
-        hal_enableIRQs();
-    }
-    if (j) { // run job callback
-#ifdef CFG_warnjobs
-	// warn about late execution of precisely timed jobs
-	if ( (j->flags & (OSJOB_FLAG_NOW | OSJOB_FLAG_APPROX) ) == 0) {
-	    ostime_t delta = os_getTime() - j->deadline;
-	    if ( delta > 1 ) {
-		debug_printf("WARNING: job 0x%08x (func 0x%08x) executed %d ticks late\r\n", j, j->func, delta);
-	    }
-	}
-#endif
-	hal_watchcount(30); // max 60 sec
-	j->func(j);
-	hal_watchcount(0);
-    }
+    hal_sleep(OS.exact ? HAL_SLEEP_EXACT : HAL_SLEEP_APPROX, deadline);
+    hal_enableIRQs();
 }
 
 // execute jobs from timer and from run queue

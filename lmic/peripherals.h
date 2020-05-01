@@ -59,6 +59,7 @@ enum {
     PIO_INP_ANA = -5,           // ..011b
 };
 
+void pio_default (unsigned int pin);
 void pio_set (unsigned int pin, int value);
 int pio_get (unsigned int pin);
 
