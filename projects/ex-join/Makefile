@@ -7,7 +7,7 @@
 #TARGET := nucleo_l053r8-sx1262mbed
 TARGET := wrl13990-sx1276mb1las
 
-VARIANTS := eu868 us915 hybrid #simul
+VARIANTS := eu868 us915 hybrid simul
 
 REGIONS.simul := eu868
 TARGET.simul := unicorn
@@ -28,6 +28,7 @@ DEFS += -DSVC_FWMAN_TEST # enable test key function in fwman service
 DEFS += -DSVC_FWMAN_PUBKEY=fwman_testkey
 DEFS += -DSVC_FWMAN_CURVE=uECC_secp256r1
 
+LMICCFG += eeprom_keys
 LMICCFG += eeprom_region
 LMICCFG += DEBUG
 LMICCFG += extapi

@@ -176,6 +176,7 @@ void hal_sleep (u1_t type, u4_t targettime) {
 
 // -----------------------------------------------------------------------------
 // LoRaWAN glue
+
 u1_t hal_getBattLevel (void) {
     return 0;
 }
@@ -193,23 +194,122 @@ u4_t hal_dnonce_next (void) {
 
 static const nrfx_spim_t radio_spi = NRFX_SPIM_INSTANCE(0);
 
+static void radio_spi_init (void) {
+    pio_set(GPIO_SX_NSS, 1);
+}
+
+static void spi_on (void) {
+    nrfx_spim_config_t cfg = {
+        .sck_pin        = BRD_GPIO_PIN(GPIO_SX_SCK),
+        .mosi_pin       = BRD_GPIO_PIN(GPIO_SX_MOSI),
+        .miso_pin       = BRD_GPIO_PIN(GPIO_SX_MISO),
+        .ss_pin         = NRFX_SPIM_PIN_NOT_USED,
+        .irq_priority   = HAL_IRQ_PRIORITY,
+        .frequency      = NRF_SPIM_FREQ_8M,
+        .mode           = NRF_SPIM_MODE_0,
+        .bit_order      = NRF_SPIM_BIT_ORDER_MSB_FIRST,
+        .miso_pull      = NRF_GPIO_PIN_NOPULL,
+        NRFX_SPIM_DEFAULT_EXTENDED_CONFIG
+    };
+
+    nrfx_err_t rv;
+    rv = nrfx_spim_init(&radio_spi, &cfg, NULL, NULL);
+    ASSERT(rv == NRFX_SUCCESS);
+}
+
+static void spi_off (void) {
+    nrfx_spim_uninit(&radio_spi);
+}
+
 void hal_spi_select (int on) {
+    if( on ) {
+        spi_on();
+        pio_set(GPIO_SX_NSS, 0);
+    } else {
+        pio_set(GPIO_SX_NSS, 1);
+        spi_off();
+    }
 }
 
 u1_t hal_spi (u1_t out) {
+    u1_t in;
+    nrfx_spim_xfer_desc_t xfr = {
+        .p_tx_buffer = &out,
+        .tx_length = 1,
+        .p_rx_buffer = &in,
+        .rx_length = 1
+    };
+
+    nrfx_err_t rv;
+    rv = nrfx_spim_xfer(&radio_spi, &xfr, 0);
+    ASSERT(rv == NRFX_SUCCESS);
+
+    return in;
 }
 
 bool hal_pin_tcxo (u1_t val) {
+#if defined(GPIO_TCXO_PWR)
+    if( val ) {
+        pio_set(GPIO_TCXO_PWR, 1);
+    } else {
+        pio_default(GPIO_TCXO_PWR);
+    }
+    return true;
+#else
     return false;
+#endif
 }
 
 void hal_ant_switch (u1_t val) {
+#ifdef SVC_pwrman
+    static ostime_t t1;
+    static int ctype;
+    static uint32_t radio_ua;
+    ostime_t now = hal_ticks();
+    if( radio_ua ) {
+        pwrman_consume(ctype, now - t1, radio_ua);
+        radio_ua = 0;
+    }
+#endif
+    if( val == HAL_ANTSW_OFF ) {
+#ifdef GPIO_TXRX_EN
+        pio_set(GPIO_TXRX_EN, 0);
+#endif
+    } else {
+#ifdef SVC_pwrman
+        t1 = now;
+        ctype = (val == HAL_ANTSW_RX) ? PWRMAN_C_RX : PWRMAN_C_TX;
+        radio_ua = LMIC.radioPwr_ua;
+#endif
+#ifdef GPIO_TXRX_EN
+        pio_set(GPIO_TXRX_EN, 1);
+#endif
+    }
+#ifdef GPIO_RX
+    pio_set(GPIO_RX, (val == HAL_ANTSW_RX));
+#endif
+#ifdef GPIO_TX
+    pio_set(GPIO_TX, (val == HAL_ANTSW_TX));
+#endif
+#ifdef GPIO_TX2
+    pio_set(GPIO_TX2, (val == HAL_ANTSW_TX2));
+#endif
 }
 
 void hal_pin_rst (u1_t val) {
+    if( val == 0 || val == 1 ) { // drive pin
+        pio_set(GPIO_SX_RESET, val);
+    } else {
+        pio_default(GPIO_SX_RESET);
+    }
 }
 
 void hal_pin_busy_wait (void) {
+#ifdef GPIO_BUSY
+    pio_set(GPIO_BUSY, PIO_INP_HIZ);
+    while( pio_get(GPIO_BUSY) != 0 );
+    pio_default(GPIO_BUSY);
+#endif
 }
 
 void hal_irqmask_set (int mask) {
@@ -220,7 +320,7 @@ void hal_irqmask_set (int mask) {
 // -----------------------------------------------------------------------------
 // Debug
 
-static const nrfx_uarte_t debug_port = NRFX_UARTE_INSTANCE(0); // XXX
+static const nrfx_uarte_t debug_port = NRFX_UARTE_INSTANCE(0);
 
 static void debug_init (void) {
     nrfx_uarte_config_t cfg = {
@@ -318,6 +418,7 @@ void hal_init (void* bootarg) {
     debug_init();
 #endif
     clock_init();
+    radio_spi_init();
 }
 
 
