@@ -1,3 +1,4 @@
+// Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
 // Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 // Copyright (C) 2014-2016 IBM Corporation. All rights reserved.
 //
@@ -330,37 +331,36 @@ static struct {
 
 // ----------------------------------------
 static void writeReg (u1_t addr, u1_t data) {
+    u1_t tbuf[2] = { addr | 0x80, data };
     hal_spi_select(1);
-    hal_spi(addr | 0x80);
-    hal_spi(data);
+    hal_spi_transact(tbuf, 2, NULL, 0);
     hal_spi_select(0);
 }
 
 static u1_t readReg (u1_t addr) {
+    u1_t val;
+    addr &= 0x7f;
     hal_spi_select(1);
-    hal_spi(addr & 0x7F);
-    u1_t val = hal_spi(0x00);
+    hal_spi_transact(&addr, 1, &val, 1);
     hal_spi_select(0);
     return val;
 }
 
 // (used by perso)
 void radio_writeBuf (u1_t addr, u1_t* buf, u1_t len) {
+    u1_t tbuf[1 + len];
+    tbuf[0] = addr | 0x80;
+    memcpy(tbuf + 1, buf, len);
     hal_spi_select(1);
-    hal_spi(addr | 0x80);
-    for (u1_t i = 0; i < len; i++) {
-        hal_spi(buf[i]);
-    }
+    hal_spi_transact(tbuf, 1 + len, NULL, 0);
     hal_spi_select(0);
 }
 
 // (used by  perso)
 void radio_readBuf (u1_t addr, u1_t* buf, u1_t len) {
+    addr &= 0x7f;
     hal_spi_select(1);
-    hal_spi(addr & 0x7F);
-    for (u1_t i = 0; i < len; i++) {
-        buf[i] = hal_spi(0x00);
-    }
+    hal_spi_transact(&addr, 1, buf, len);
     hal_spi_select(0);
 }
 

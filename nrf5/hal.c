@@ -37,6 +37,14 @@ static inline bool nrfx_rtc_overflow_pending (nrfx_rtc_t const * p_instance) {
     return nrf_rtc_event_check(p_instance->p_reg, NRF_RTC_EVENT_OVERFLOW);
 }
 
+static inline void nrfx_spim_suspend (nrfx_spim_t const * p_instance) {
+    nrf_spim_disable(p_instance->p_reg);
+}
+
+static inline void nrfx_spim_resume (nrfx_spim_t const * p_instance) {
+    nrf_spim_enable(p_instance->p_reg);
+}
+
 static inline void nrfx_uarte_suspend (nrfx_uarte_t const * p_instance) {
     nrf_uarte_disable(p_instance->p_reg);
 }
@@ -195,10 +203,6 @@ u4_t hal_dnonce_next (void) {
 static const nrfx_spim_t radio_spi = NRFX_SPIM_INSTANCE(0);
 
 static void radio_spi_init (void) {
-    pio_set(GPIO_SX_NSS, 1);
-}
-
-static void spi_on (void) {
     nrfx_spim_config_t cfg = {
         .sck_pin        = BRD_GPIO_PIN(GPIO_SX_SCK),
         .mosi_pin       = BRD_GPIO_PIN(GPIO_SX_MOSI),
@@ -212,39 +216,42 @@ static void spi_on (void) {
         NRFX_SPIM_DEFAULT_EXTENDED_CONFIG
     };
 
+    pio_set(GPIO_SX_NSS, 1);
+    // TODO: pull-down on MOSI/SCK?
+
     nrfx_err_t rv;
     rv = nrfx_spim_init(&radio_spi, &cfg, NULL, NULL);
     ASSERT(rv == NRFX_SUCCESS);
-}
 
-static void spi_off (void) {
-    nrfx_spim_uninit(&radio_spi);
+    nrfx_spim_suspend(&radio_spi);
 }
 
 void hal_spi_select (int on) {
     if( on ) {
-        spi_on();
+        nrfx_spim_resume(&radio_spi);
         pio_set(GPIO_SX_NSS, 0);
     } else {
         pio_set(GPIO_SX_NSS, 1);
-        spi_off();
+        nrfx_spim_suspend(&radio_spi);
     }
 }
 
-u1_t hal_spi (u1_t out) {
-    u1_t in;
+void hal_spi_transact (const u1_t* txbuf, u1_t txlen, u1_t* rxbuf, u1_t rxlen) {
+    u1_t buf[txlen + rxlen];
     nrfx_spim_xfer_desc_t xfr = {
-        .p_tx_buffer = &out,
-        .tx_length = 1,
-        .p_rx_buffer = &in,
-        .rx_length = 1
+        .p_tx_buffer = txbuf,
+        .tx_length = txlen,
+        .p_rx_buffer = buf,
+        .rx_length = txlen + rxlen,
     };
 
     nrfx_err_t rv;
     rv = nrfx_spim_xfer(&radio_spi, &xfr, 0);
     ASSERT(rv == NRFX_SUCCESS);
 
-    return in;
+    if( rxlen ) {
+        memcpy(rxbuf, buf + txlen, rxlen);
+    }
 }
 
 bool hal_pin_tcxo (u1_t val) {
@@ -337,6 +344,8 @@ static void debug_init (void) {
         }
     };
 
+    pio_set(GPIO_DBG_TX, 1);
+
     if( nrfx_uarte_init(&debug_port, &cfg, NULL) != NRFX_SUCCESS ) {
         hal_failed();
     }
@@ -367,7 +376,7 @@ void hal_debug_str (const char* str) {
 void hal_debug_led (int val) {
 #ifdef GPIO_DBG_LED
     if( val ) {
-        pio_set(BRD_GPIO_PIN(GPIO_DBG_LED), (GPIO_DBG_LED & BRD_GPIO_ACTIVE_LOW) ? 0 : 1);
+        pio_activate(GPIO_DBG_LED, true);
     } else {
         pio_default(BRD_GPIO_PIN(GPIO_DBG_LED));
     }
@@ -376,6 +385,13 @@ void hal_debug_led (int val) {
 
 #endif
 
+u4_t hal_unique (void) {
+    return NRF_FICR->DEVICEID[0];
+}
+
+void sha256 (uint32_t* hash, const uint8_t* msg, uint32_t len) {
+    HAL.boottab->sha256(hash, msg, len);
+}
 
 void hal_fwinfo (hal_fwi* fwi) {
     fwi->blversion = HAL.boottab->version;
@@ -384,27 +400,6 @@ void hal_fwinfo (hal_fwi* fwi) {
     fwi->version = fwhdr.version;
     fwi->crc = fwhdr.boot.crc;
     fwi->flashsz = FLASH_SZ;
-}
-
-void os_getDevEui (u1_t* buf) {
-    os_wlsbf4(buf, 0xdeafbeef);
-    os_wlsbf4(buf+4, 0xdeafbeef);
-}
-void os_getNwkKey (u1_t* buf) {
-}
-void os_getJoinEui (u1_t* buf){
-}
-
-u1_t os_getRegion (void) {
-    return 0;
-}
-
-u1_t* hal_serial (void) {
-    return (u1_t*) "****************";
-}
-
-u4_t  hal_hwid (void) {
-    return 0;
 }
 
 
@@ -417,6 +412,7 @@ void hal_init (void* bootarg) {
 #ifdef CFG_DEBUG
     debug_init();
 #endif
+    hal_pd_init();
     clock_init();
     radio_spi_init();
 }

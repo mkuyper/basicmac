@@ -188,10 +188,19 @@ void hal_spi_select (int on) {
 }
 
 // perform SPI transaction with radio
-u1_t hal_spi (u1_t out) {
+static u1_t spi_byte (u1_t out) {
     SPIx->DR = out;
     while( (SPIx->SR & SPI_SR_RXNE ) == 0);
     return SPIx->DR; // in
+}
+
+void hal_spi_transact (const u1_t* txbuf, u1_t txlen, u1_t* rxbuf, u1_t rxlen) {
+    for( int i = 0; i < txlen; i++) {
+        spi_byte(txbuf[i]);
+    }
+    for( int i = 0; i < rxlen; i++) {
+        rxbuf[i] = spi_byte(0);
+    }
 }
 
 
@@ -998,7 +1007,7 @@ void hal_init (void* bootarg) {
 
     clock_init();
 
-    pd_init();
+    hal_pd_init();
 
 #if 1
     // disable single-wire debug (SWD) when running

@@ -1,3 +1,4 @@
+// Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
 // Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 //
 // This file is subject to the terms and conditions defined in file 'LICENSE',
@@ -14,9 +15,8 @@ void pio_irq_clear (uint32_t mask);
 void pio_irq_enable (unsigned int gpio, bool enable);
 void pio_irq_config (unsigned int pin, bool rising, bool falling);
 
-// Personalization data (persodata.c)
-void pd_init (void);
-bool pd_verify (void);
+// Personalization data
+#define HAL_PERSODATA_BASE PERSODATA_BASE
 
 #if defined(SVC_fuota)
 // Glue for FUOTA (fountain code) service

@@ -16,6 +16,10 @@ typedef struct {
     uint32_t version;
 } hal_fwhdr;
 
+// Personalization data
+extern uint32_t _bperso[];
+#define HAL_PERSODATA_BASE ((uintptr_t) &_bperso)
+
 // Interrupt handlers
 typedef struct {
     uint32_t    num;            // NVIC interrupt number

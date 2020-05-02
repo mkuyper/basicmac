@@ -24,15 +24,17 @@
 
 #elif defined(CFG_sx1276mb1mas) || defined(CFG_sx1276mb1las)
 
-#define GPIO_SX_RESET   0
-#define GPIO_SX_DIO0    1
-#define GPIO_SX_DIO1    2
-#define GPIO_SX_DIO2    3
-#define GPIO_SX_NSS     4
-#define GPIO_SX_SCK     5
-#define GPIO_SX_MISO    6
-#define GPIO_SX_MOSI    7
-#define GPIO_ANT_TX     8
+#define GPIO_SX_RESET   16
+#define GPIO_SX_DIO0    8
+#define GPIO_SX_DIO1    9
+#define GPIO_SX_DIO2    10
+
+#define GPIO_ANT_TX     17
+
+#define GPIO_SX_NSS     11
+#define GPIO_SX_SCK     14
+#define GPIO_SX_MISO    13
+#define GPIO_SX_MOSI    12
 
 #define BRD_sx1276_radio
 #if defined(CFG_sx1276mb1las)
@@ -46,6 +48,6 @@
 #endif
 
 #define GPIO_DBG_LED    (7 | BRD_GPIO_ACTIVE_LOW)
-#define GPIO_DBG_TX     (27)
+#define GPIO_DBG_TX     27
 
 #endif

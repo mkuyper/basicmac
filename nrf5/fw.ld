@@ -1,3 +1,5 @@
+_bperso = ORIGIN(PERSO);
+
 SECTIONS {
     .text : {
         . = ALIGN(4);

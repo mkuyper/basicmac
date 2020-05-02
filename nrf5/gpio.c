@@ -15,8 +15,11 @@ void pio_set (unsigned int pin, int value) {
     } else {
         nrf_gpio_cfg_output(BRD_GPIO_PIN(pin));
         nrf_gpio_pin_write(BRD_GPIO_PIN(pin), value);
-
     }
+}
+
+void pio_activate (unsigned int pin, bool active) {
+    pio_set(pin, (pin & BRD_GPIO_ACTIVE_LOW) ? !active : active);
 }
 
 int pio_get (unsigned int pin) {

@@ -62,6 +62,7 @@ enum {
 void pio_default (unsigned int pin);
 void pio_set (unsigned int pin, int value);
 int pio_get (unsigned int pin);
+void pio_activate (unsigned int pin, bool active);
 
 #endif
 

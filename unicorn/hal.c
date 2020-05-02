@@ -1,3 +1,4 @@
+// Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
 // Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 //
 // This file is subject to the terms and conditions defined in file 'LICENSE',
@@ -84,7 +85,7 @@ void hal_init (void* bootarg) {
     debug_str("\r\n============== DEBUG STARTED ==============\r\n");
 #endif
 
-    pd_init();
+    hal_pd_init();
 
 #if defined(SVC_frag)
     {

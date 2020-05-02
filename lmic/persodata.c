@@ -1,3 +1,4 @@
+// Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
 // Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 //
 // This file is subject to the terms and conditions defined in file 'LICENSE',
@@ -5,6 +6,8 @@
 
 #include "lmic.h"
 #include "peripherals.h"
+
+#ifdef HAL_PERSODATA_BASE
 
 #define PERSODATA_MAGIC_V1      0xb2dc4db2 /* openssl rand */
 
@@ -21,9 +24,12 @@ typedef struct {
     uint32_t    hash[8];        // 0x50 hash
 } persodata_v1;
 
-_Static_assert(sizeof(persodata_v1) <= PERSODATA_SZ, "persodata struct too large");
+_Static_assert(sizeof(persodata_v1) <= 256, "persodata struct too large");
 
-persodata_v1 pd;
+static struct {
+    bool valid;
+    persodata_v1 data;
+} pd;
 
 static persodata_v1* pd_check_v1 (void* ptr) {
     persodata_v1* ppd = ptr;
@@ -38,62 +44,54 @@ static persodata_v1* pd_check_v1 (void* ptr) {
     return NULL;
 }
 
-void pd_init (void) {
-    persodata_v1* ppd = pd_check_v1((void*) PERSODATA_BASE);
+void hal_pd_init (void) {
+    persodata_v1* ppd = pd_check_v1((void*) HAL_PERSODATA_BASE);
     if( ppd ) {
-        pd = *ppd;
-    } else { // TODO - check TrackNet legacy
+        pd.data = *ppd;
+        pd.valid = true;
+    } else {
         // fill defaults
         uint64_t eui;
 
         eui = 0xffffffaa00000000ULL | hal_unique();
-        memcpy(pd.deveui, &eui, 8);
+        memcpy(pd.data.deveui, &eui, 8);
         eui = 0xffffffbb00000000ULL;
-        memcpy(pd.joineui, &eui, 8);
-        memcpy(pd.nwkkey, "@ABCDEFGHIJKLMNO", 16);
-        memcpy(pd.appkey, "`abcdefghijklmno", 16);
+        memcpy(pd.data.joineui, &eui, 8);
+        memcpy(pd.data.nwkkey, "@ABCDEFGHIJKLMNO", 16);
+        memcpy(pd.data.appkey, "`abcdefghijklmno", 16);
     }
 }
 
-// private API to verify EEPROM data was valid
-bool pd_verify (void) {
-    persodata_v1* ppd = (void*) PERSODATA_BASE;
-    if( ppd->magic == PERSODATA_MAGIC_V1 ) {
-	uint32_t hash[8];
-        sha256(hash, (uint8_t*) ppd, sizeof(persodata_v1) - 32);
-        if( memcmp(hash, ppd->hash, 32) == 0 ) {
-            return true;
-        }
-    }
-    return false;
+bool hal_pd_valid (void) {
+    return pd.valid;
 }
 
 u1_t* hal_joineui (void) {
-    return pd.joineui;
+    return pd.data.joineui;
 }
 
 u1_t* hal_deveui (void) {
-    return pd.deveui;
+    return pd.data.deveui;
 }
 
 u1_t* hal_nwkkey (void) {
-    return pd.nwkkey;
+    return pd.data.nwkkey;
 }
 
 u1_t* hal_appkey (void) {
-    return pd.appkey;
+    return pd.data.appkey;
 }
 
 u1_t* hal_serial (void) {
-    return pd.serial;
+    return pd.data.serial;
 }
 
 u4_t hal_region (void) {
-    return pd.region;
+    return pd.data.region;
 }
 
 u4_t hal_hwid (void) {
-    return pd.hwid;
+    return pd.data.hwid;
 }
 
 #ifdef CFG_eeprom_region
@@ -123,4 +121,6 @@ void os_getNwkKey (u1_t* buf) {
 void os_getAppKey (u1_t* buf) {
     memcpy(buf, hal_appkey(), 16);
 }
+#endif
+
 #endif
