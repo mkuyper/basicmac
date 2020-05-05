@@ -64,6 +64,7 @@ static inline void nrfx_uarte_resume (nrfx_uarte_t const * p_instance) {
 // don't change these values, so we know what they are in the field...
 enum {
     PANIC_HAL_FAILED    = 0,
+    PANIC_LFCLK_NOSTART = 1,
 };
 
 __attribute__((noreturn))
@@ -104,6 +105,22 @@ void hal_enableIRQs (void) {
     }
 }
 
+__attribute__((always_inline)) static inline uint32_t getpc (void) {
+    uint32_t addr;
+    __asm__ volatile ("mov %[addr], pc" : [addr]"=r" (addr) : : );
+    return addr;
+}
+
+// Busy wait on condition with timeout (about 10-20s)
+#define SAFE_while(reason, expr) do { \
+    volatile uint32_t __timeout = (1 << 27); \
+    while( expr ) { \
+        if( __timeout-- == 0 ) { \
+            panic(reason, getpc()); \
+        } \
+    } \
+} while (0)
+
 
 // -----------------------------------------------------------------------------
 // Clock and Time
@@ -133,7 +150,9 @@ static void clock_init (void) {
     rv = nrfx_clock_init(clock_handler);
     ASSERT(rv == NRFX_SUCCESS);
 
+    nrfx_clock_enable(); // this is necessary to switch clock source
     nrfx_clock_start(NRF_CLOCK_DOMAIN_LFCLK);
+    SAFE_while(PANIC_LFCLK_NOSTART, !nrfx_clock_is_running(NRF_CLOCK_DOMAIN_LFCLK, NULL));
 
     rv = nrfx_rtc_init(&rtc1, &cfg, rtc1_handler);
     ASSERT(rv == NRFX_SUCCESS);
@@ -416,20 +435,6 @@ static void dio_init (void) {
     nrf_ppi_channel_endpoint_setup(NRF_PPI, DIO_PPICH_DIO,
             nrf_gpiote_event_address_get(NRF_GPIOTE, NRF_GPIOTE_EVENT_PORT),
             nrfx_timer_capture_task_address_get(&dio_timer, DIO_TMRCH_DIO));
-
-#if 0
-    // XXX
-    static const nrfx_gpiote_out_config_t ocfg = NRFX_GPIOTE_CONFIG_OUT_TASK_TOGGLE(false);
-    nrfx_rtc_tick_enable(&rtc1, false);
-    rv = nrfx_gpiote_out_init(15, &ocfg);
-    nrfx_gpiote_out_task_enable(15);
-    ASSERT(rv == NRFX_SUCCESS);
-    nrf_ppi_channel_endpoint_setup(NRF_PPI, 4,
-            nrfx_rtc_event_address_get(&rtc1, NRF_RTC_EVENT_TICK),
-            nrfx_gpiote_out_task_addr_get(15));
-    nrf_ppi_channel_enable(NRF_PPI, 4);
-    while(1);
-#endif
 }
 
 static void dio_timer_start (void) {
@@ -595,6 +600,7 @@ void hal_init (void* bootarg) {
 const irqdef HAL_irqdefs[] = {
     { RTC1_IRQn, nrfx_rtc_1_irq_handler },
     { GPIOTE_IRQn, nrfx_gpiote_irq_handler },
+    { POWER_CLOCK_IRQn, nrfx_clock_irq_handler },
 
     { ~0, NULL } // end of list
 };
