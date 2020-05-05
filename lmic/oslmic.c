@@ -166,8 +166,9 @@ void os_runstep (void) {
         deadline = j->deadline;
         if( (deadline - now) <= 0 ) {
 	    OS.scheduledjobs = j->next; // de-queue
-            hal_enableIRQs();
-
+            if( (j->flags & OSJOB_FLAG_IRQDISABLED) == 0 ) {
+                hal_enableIRQs();
+            }
             hal_watchcount(30); // max 60 sec XXX
             j->func(j);
             hal_watchcount(0);
