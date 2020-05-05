@@ -25,9 +25,10 @@
 #elif defined(CFG_sx1276mb1mas) || defined(CFG_sx1276mb1las)
 
 #define GPIO_SX_RESET   16
-#define GPIO_SX_DIO0    8
-#define GPIO_SX_DIO1    9
-#define GPIO_SX_DIO2    10
+#define GPIO_SX_DIO0    18
+#define GPIO_SX_DIO1    19
+#define GPIO_SX_DIO2    20
+#define GPIO_SX_DIO3    22
 
 #define GPIO_ANT_TX     17
 

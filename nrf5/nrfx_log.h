@@ -6,10 +6,19 @@
 #ifndef _nrfx_log_h
 #define _nrfx_log_h
 
+
+#if 0
+extern void debug_printf (char const *format, ...);
+#define NRFX_LOG_ERROR(format, ...)     debug_printf(format, ##__VA_ARGS__)
+#define NRFX_LOG_WARNING(format, ...)   debug_printf(format, ##__VA_ARGS__)
+#define NRFX_LOG_INFO(format, ...)      debug_printf(format, ##__VA_ARGS__)
+#define NRFX_LOG_DEBUG(format, ...)     debug_printf(format, ##__VA_ARGS__)
+#else
 #define NRFX_LOG_ERROR(format, ...)
 #define NRFX_LOG_WARNING(format, ...)
 #define NRFX_LOG_INFO(format, ...)
 #define NRFX_LOG_DEBUG(format, ...)
+#endif
 
 #define NRFX_LOG_HEXDUMP_ERROR(p_memory, length)
 #define NRFX_LOG_HEXDUMP_WARNING(p_memory, length)
