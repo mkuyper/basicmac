@@ -516,17 +516,12 @@ class Simulation:
         self.emu.reg_write(uca.UC_ARM_REG_R1, numpy.uint32((self.ticks >> 32)))
         return True
 
-    def svc_sleep(self, params:Tuple[int,int,int], lr:int) -> bool:
-        if params[0] == 2: # forever
-            target = self.ticks + Simulation.time2ticks(10 * 3600)
-        else:
-            target = Simulation.ticks_extend(params[1], self.ticks)
+    def svc_sleep(self, params:Tuple[int,int,int], lr:int) -> None:
+        target = Simulation.ticks_extend(params[1], self.ticks)
         if target > self.ticks:
             self.sleep = target
-            self.emu.reg_write(uca.UC_ARM_REG_R0, 1)
             return False
         else:
-            self.emu.reg_write(uca.UC_ARM_REG_R0, 0)
             return True
 
     def svc_tx(self, params:Tuple[int,int,int], lr:int) -> bool:

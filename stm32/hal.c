@@ -188,10 +188,19 @@ void hal_spi_select (int on) {
 }
 
 // perform SPI transaction with radio
-u1_t hal_spi (u1_t out) {
+static u1_t spi_byte (u1_t out) {
     SPIx->DR = out;
     while( (SPIx->SR & SPI_SR_RXNE ) == 0);
     return SPIx->DR; // in
+}
+
+void hal_spi_transact (const u1_t* txbuf, u1_t txlen, u1_t* rxbuf, u1_t rxlen) {
+    for( int i = 0; i < txlen; i++) {
+        spi_byte(txbuf[i]);
+    }
+    for( int i = 0; i < rxlen; i++) {
+        rxbuf[i] = spi_byte(0);
+    }
 }
 
 
@@ -624,20 +633,15 @@ u4_t hal_ticks () {
 }
 
 // NOTE: interrupts are already be disabled when this HAL function is called!
-u1_t hal_sleep (u1_t type, u4_t targettime) {
+void hal_sleep (u1_t type, u4_t targettime) {
     static const u8_t S_TH[] = {
         0, 6, 190
     };
 
     u8_t xnow = hal_xticks_unsafe();
-    s4_t dt;
-    if( type == HAL_SLEEP_FOREVER ) {
-        dt = sec2osticks(12*60*60); // 12 h
-    } else {
-        dt = (s4_t) targettime - (s4_t) xnow;
-    }
+    s4_t dt = (s4_t) targettime - (s4_t) xnow;
     if( dt <= 0 ) {
-        return 0; // it's time now
+        return; // it's time now
     }
 
     // select sleep type
@@ -672,8 +676,6 @@ u1_t hal_sleep (u1_t type, u4_t targettime) {
     HAL.rtstats.sleep[stype] += (t2 - t1);
     wakeup = t2;
 #endif
-
-    return 1; // we slept
 }
 
 // short-term busy wait
@@ -1005,7 +1007,7 @@ void hal_init (void* bootarg) {
 
     clock_init();
 
-    pd_init();
+    hal_pd_init();
 
 #if 1
     // disable single-wire debug (SWD) when running

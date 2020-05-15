@@ -57,9 +57,8 @@ typedef struct {
     uint32_t version;
 } hal_fwhdr;
 
-// Personalization data (persodata.c)
-void pd_init (void);
-bool pd_verify (void);
+// Personalization data
+#define HAL_PERSODATA_BASE PERSODATA_BASE
 
 void usart_irq (void);
 

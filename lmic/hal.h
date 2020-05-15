@@ -1,3 +1,4 @@
+// Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
 // Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 // Copyright (C) 2014-2016 IBM Corporation. All rights reserved.
 //
@@ -61,11 +62,11 @@ void hal_irqmask_set (int mask);
 void hal_spi_select (int on);
 
 /*
- * perform 8-bit SPI transaction with radio.
- *   - write given byte 'outval'
- *   - read byte and return value
+ * perform sequential SPI transaction with radio.
+ *   - write txlen bytes from txbuf to SPI
+ *   - read rxlen bytes into rxbuf from SPI
  */
-u1_t hal_spi (u1_t outval);
+void hal_spi_transact (const u1_t* txbuf, u1_t txlen, u1_t* rxbuf, u1_t rxlen);
 
 /*
  * disable all CPU interrupts.
@@ -81,13 +82,10 @@ void hal_enableIRQs (void);
 
 /*
  * put system and CPU in low-power mode, sleep until target time / interrupt.
- *   - return 0 if target time is close
- *   - otherwise sleep until target time / interrupt and return non-zero
  */
 #define HAL_SLEEP_EXACT		0
 #define HAL_SLEEP_APPROX	1
-#define HAL_SLEEP_FOREVER	2
-u1_t hal_sleep (u1_t type, u4_t targettime);
+void hal_sleep (u1_t type, u4_t targettime);
 
 /*
  * return 32-bit system time in ticks.
@@ -142,6 +140,8 @@ typedef struct {
 
 void hal_fwinfo (hal_fwi* fwi);
 
+void hal_pd_init (void);
+bool hal_pd_valid (void);
 u1_t* hal_joineui (void);
 u1_t* hal_deveui (void);
 u1_t* hal_nwkkey (void);
