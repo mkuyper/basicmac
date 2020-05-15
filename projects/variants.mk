@@ -1,3 +1,4 @@
+# Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
 # Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 #
 # This file is subject to the terms and conditions defined in file 'LICENSE',
@@ -9,7 +10,7 @@ RVARIANT	:= $(VARIANT)
 
 ifeq ($(VARIANT),)
     VTARGET	:= variants
-    VARIANT	:= $(firstword $(DEFAULT_VARIANT) $(VARIANTS))
+    VARIANT	:= $(firstword $(filter $(DEFAULT_VARIANT),$(VARIANTS)) $(VARIANTS))
 else
     VTARGET	:= all
 endif
