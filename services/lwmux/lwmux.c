@@ -100,7 +100,7 @@ again:
 }
 
 static ostime_t slot_offset (void) {
-    ostime_t t_slot = calcAirTime(updr2rps(LMIC.datarate), 13 + state.bcn.slotsz); // XXX do we need the 13?
+    ostime_t t_slot = calcAirTime(LMIC_updr2rps(LMIC.datarate), 13 + state.bcn.slotsz); // XXX do we need the 13?
     unsigned int nslots = state.bcn.t_slots / t_slot;
     ASSERT(nslots != 0);
     return (lwm_slot() % nslots) * t_slot;
