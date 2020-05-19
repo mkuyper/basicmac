@@ -10,6 +10,20 @@
 #include "hw.h"
 #include "boottab.h"
 
+// peripherals
+enum {
+    HAL_PID_DEBUG,
+    HAL_PID_TIMER,
+
+    HAL_PID_COUNT
+};
+
+void hal_periph_register (uint32_t id, const unsigned char* uuid);
+void hal_periph_svc (uint32_t id, uint32_t p1, uint32_t p2, uint32_t p3);
+
+void debug_init (void);
+void timer_init (void);
+
 uint32_t pio_irq_get (void);
 void pio_irq_clear (uint32_t mask);
 void pio_irq_enable (unsigned int gpio, bool enable);
