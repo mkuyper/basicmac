@@ -27,6 +27,10 @@ static inline void wfi (void) {
     ((void (*) (uint32_t)) HAL_svc)(SVC_WFI);
 }
 
+static inline void irq (void) {
+    ((void (*) (uint32_t)) HAL_svc)(SVC_IRQ);
+}
+
 void hal_init (void* bootarg) {
     sim.boottab = bootarg;
     ASSERT(sim.boottab->version >= 0x105); // require bootloader v261
@@ -56,8 +60,8 @@ void hal_init (void* bootarg) {
 #endif
 }
 
-
 void hal_watchcount (int cnt) {
+    // not implemented
 }
 
 void hal_disableIRQs (void) {
@@ -70,7 +74,7 @@ void hal_enableIRQs (void) {
     ASSERT(sim.irqlevel);
     if( --sim.irqlevel == 0 ) {
         asm volatile ("cpsie i" : : : "memory");
-        // TODO - kick simul to get interrupts to run
+        irq();
     }
 }
 

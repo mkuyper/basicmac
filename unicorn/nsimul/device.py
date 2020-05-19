@@ -11,7 +11,6 @@ import ctypes
 import asyncio
 import struct
 import sys
-import types
 
 import unicorn as uc
 import unicorn.arm_const as uca
@@ -19,6 +18,110 @@ import unicorn.arm_const as uca
 from colorama import Fore, Style, init as colorama_init
 from intelhex import IntelHex
 from uuid import UUID
+
+
+# -----------------------------------------------------------------------------
+# Peripherals
+
+class Peripheral:
+    uuid:Optional[UUID] = None
+
+    def __init__(self, sim:'Simulation', pid:int):
+        self.sim = sim
+        self.pid = pid
+        self.init()
+
+    def init(self) -> None:
+        pass
+
+    def svc(self, fid:int) -> None:
+        raise NotImplementedError
+
+class Peripherals:
+    peripherals:Dict[UUID,Type[Peripheral]] = {}
+
+    @staticmethod
+    def add(cls:Type[Peripheral]) -> Type[Peripheral]:
+        assert cls.uuid is not None
+        Peripherals.peripherals[cls.uuid] = cls
+        return cls
+
+    @staticmethod
+    def register(cls:Type['ctypes._CData']) -> Type['ctypes._CData']:
+        t = cast(Type[ctypes.Union], type(cls.__name__ + '_regpage', (ctypes.Union,), {}))
+        t._anonymous_ = ('_regs',)
+        t._fields_ = [('_regs', cls), ('_page', ctypes.c_uint8 * 0x1000)]
+        return t
+
+    @staticmethod
+    def create(uuid:UUID, sim:'Simulation', pid:int) -> Peripheral:
+        if uuid not in Peripherals.peripherals:
+            raise ValueError(f'Unknown peripheral {uuid}')
+        return Peripherals.peripherals[uuid](sim, pid)
+
+
+# -----------------------------------------------------------------------------
+# Peripheral: Debug
+
+@Peripherals.add
+class DebugUnit(Peripheral):
+    uuid = UUID('4c25d84a-9913-11ea-8de8-23fb8fc027a4')
+
+    @Peripherals.register
+    class DebugRegister(ctypes.LittleEndianStructure):
+        _fields_ = [('n', ctypes.c_uint32), ('s', ctypes.c_ubyte * 1024)]
+
+    def init(self) -> None:
+        self.reg = DebugUnit.DebugRegister()
+        self.sim.map_peripheral(self.pid, self.reg)
+
+    def svc(self, fid:int) -> None:
+        assert fid == 0
+        self.sim.log(bytes(self.reg.s[:self.reg.n]).decode('utf-8'))
+
+
+# -----------------------------------------------------------------------------
+# Peripheral: Timer
+
+@Peripherals.add
+class Timer(Peripheral):
+    uuid = UUID('20c98436-994e-11ea-8de8-23fb8fc027a4')
+
+    TICKS_PER_SEC = 32768
+
+    @Peripherals.register
+    class TimerRegister(ctypes.LittleEndianStructure):
+        _fields_ = [('ticks', ctypes.c_uint64), ('target', ctypes.c_uint64)]
+
+    def init(self) -> None:
+        self.epoch = asyncio.get_running_loop().time()
+        self.reg = Timer.TimerRegister()
+        self.sim.map_peripheral(self.pid, self.reg)
+        self.sim.prerunhooks.append(self.update)
+        self.th:Optional[asyncio.TimerHandle] = None
+        self.update()
+
+    def update(self) -> None:
+        now = asyncio.get_running_loop().time() - self.epoch
+        self.reg.ticks = int(now * Timer.TICKS_PER_SEC)
+
+    def cancel(self) -> None:
+        if self.th is not None:
+            self.th.cancel()
+            self.th = None
+
+    def alarm(self) -> None:
+        self.sim.running.set()
+
+    def svc(self, fid:int) -> None:
+        assert fid == 0
+        self.cancel()
+        self.th = asyncio.get_running_loop().call_at(
+                self.epoch + (self.reg.target / Timer.TICKS_PER_SEC), self.alarm)
+
+
+# -----------------------------------------------------------------------------
+# Events / Logging
 
 class EventHub:
     LOG  = 0
@@ -49,101 +152,11 @@ class LoggingEventHub(EventHub):
         if type == EventHub.LOG:
             self.writer.write(cast(str, kwargs['msg']), style=Fore.BLUE)
 
-class Peripheral:
-    uuid:Optional[UUID] = None
 
-    @staticmethod
-    def create(sim:'Simulation', pid: int) -> 'Peripheral':
-        raise NotImplementedError
-
-    def svc(self, fid:int) -> None:
-        raise NotImplementedError
-
-class Peripherals:
-    peripherals:Dict[UUID,Type[Peripheral]] = {}
-
-    @staticmethod
-    def add(cls:Type[Peripheral]) -> Type[Peripheral]:
-        assert(cls.uuid is not None)
-        Peripherals.peripherals[cls.uuid] = cls
-        return cls
-
-    @staticmethod
-    def register(cls:Type['ctypes._CData']) -> Type['ctypes._CData']:
-        t = cast(Type[ctypes.Union], type(cls.__name__ + '_regpage', (ctypes.Union,), {}))
-        t._anonymous_ = ('_regs',)
-        t._fields_ = [('_regs', cls), ('_page', ctypes.c_uint8 * 0x1000)]
-        return t
-
-    @staticmethod
-    def create(uuid:UUID, sim:'Simulation', irqline:int) -> Peripheral:
-        return Peripherals.peripherals[uuid].create(sim, irqline)
+# -----------------------------------------------------------------------------
+# Device Simulation
 
 PreRunHook = Callable[[], None]
-
-@Peripherals.add
-class DebugUnit(Peripheral):
-    uuid = UUID('4c25d84a-9913-11ea-8de8-23fb8fc027a4')
-
-    @Peripherals.register
-    class DebugRegister(ctypes.LittleEndianStructure):
-        _fields_ = [('n', ctypes.c_uint32), ('s', ctypes.c_char * 1024)]
-
-    def __init__(self, sim:'Simulation', pid:int):
-        self.sim = sim
-        self.reg = DebugUnit.DebugRegister()
-        self.sim.map_peripheral(pid, self.reg)
-
-    @staticmethod
-    def create(sim:'Simulation', pid: int) -> Peripheral:
-        return DebugUnit(sim, pid)
-
-    def svc(self, fid:int) -> None:
-        assert(fid == 0)
-        self.sim.log(self.reg.s[:self.reg.n].decode('utf-8'))
-
-@Peripherals.add
-class Timer(Peripheral):
-    uuid = UUID('20c98436-994e-11ea-8de8-23fb8fc027a4')
-
-    TICKS_PER_SEC = 32768
-
-    @Peripherals.register
-    class TimerRegister(ctypes.LittleEndianStructure):
-        _fields_ = [('ticks', ctypes.c_uint64), ('target', ctypes.c_uint64)]
-
-    def __init__(self, sim:'Simulation', pid:int):
-        self.sim = sim
-        self.pid = pid
-        self.epoch = asyncio.get_running_loop().time()
-        self.reg = Timer.TimerRegister()
-        self.sim.map_peripheral(self.pid, self.reg)
-        self.sim.prerunhooks.append(self.update)
-        self.th:Optional[asyncio.TimerHandle] = None
-        self.update()
-
-    @staticmethod
-    def create(sim:'Simulation', pid: int) -> Peripheral:
-        return Timer(sim, pid)
-
-    def update(self) -> None:
-        now = asyncio.get_running_loop().time() - self.epoch
-        self.reg.ticks = int(now * Timer.TICKS_PER_SEC)
-
-    def cancel(self) -> None:
-        if self.th is not None:
-            self.th.cancel()
-            self.th = None
-
-    def alarm(self) -> None:
-        self.sim.running.set()
-
-    def svc(self, fid:int) -> None:
-        assert(fid == 0)
-        self.cancel()
-        self.th = asyncio.get_running_loop().call_at(
-                self.epoch + (self.reg.target / Timer.TICKS_PER_SEC), self.alarm)
-
 
 class Simulation:
     RAM_BASE    = 0x10000000
@@ -154,13 +167,14 @@ class Simulation:
     SVC_PANIC       = 0
     SVC_PERIPH_REG  = 1
     SVC_WFI         = 2
+    SVC_IRQ         = 3
     SVC_PERIPH_BASE = 0x01000000
 
     class ResetException(BaseException):
         pass
 
     def __init__(self, ramsz:int=16*1024, flashsz:int=128*1024, eesz:int=8*1024,
-            evhub:Optional[EventHub]=None) -> None:
+            uniqueid:int=0xdeadbeef, evhub:Optional[EventHub]=None) -> None:
         self.emu = uc.Uc(uc.UC_ARCH_ARM, uc.UC_MODE_THUMB)
 
         #self.emu.hook_add(uc.UC_HOOK_CODE,
@@ -178,6 +192,7 @@ class Simulation:
             self.emu.mem_map(Simulation.EE_BASE, eesz)
         self.emu.mem_map(0xfffff000, 0x1000) # special (return from interrupt)
 
+        self.uniqueid = uniqueid
         self.evhub = evhub
         self.peripherals:Dict[int,Peripheral] = { }
         self.prerunhooks:List[PreRunHook] = []
@@ -240,10 +255,15 @@ class Simulation:
         self.running.clear()
         return False
 
+    def svc_irq(self, p1:int, p2:int, p3:int, lr:int) -> bool:
+        # TODO - implement
+        return True
+
     svc_lookup = {
             SVC_PANIC      : svc_panic,
             SVC_PERIPH_REG : svc_register,
             SVC_WFI        : svc_wfi,
+            SVC_IRQ        : svc_irq,
             }
 
     def _intr(self, intno:int) -> None:

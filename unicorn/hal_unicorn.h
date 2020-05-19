@@ -15,6 +15,7 @@ enum {
     SVC_PANIC       = 0,          // panic
     SVC_PERIPH_REG  = 1,          // register peripheral
     SVC_WFI         = 2,          // sleep / wait for interrupt
+    SVC_IRQ         = 3,          // run IRQ handlers (if pending and enabled)
 
     SVC_PERIPH_BASE = 0x01000000, // base for peripheral functions
 };
