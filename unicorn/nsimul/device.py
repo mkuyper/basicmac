@@ -56,7 +56,7 @@ class Peripheral:
     def create(sim:'Simulation', pid: int) -> 'Peripheral':
         raise NotImplementedError
 
-    def svc(self, p1:int, p2:int, p3:int) -> None:
+    def svc(self, fid:int, p1:int, p2:int, p3:int) -> None:
         raise NotImplementedError
 
 class Peripherals:
@@ -92,9 +92,9 @@ class DebugUnit(Peripheral):
     def create(sim:'Simulation', pid: int) -> Peripheral:
         return DebugUnit(sim)
 
-    def svc(self, p1:int, p2:int, p3:int) -> None:
-        assert(p1 == 0)
-        self.sim.log(self.sim.get_string(p2, p3))
+    def svc(self, fid:int, p1:int, p2:int, p3:int) -> None:
+        assert(fid == 0)
+        self.sim.log(self.sim.get_string(p1, p2))
 
 @Peripherals.add
 class Timer(Peripheral):
@@ -113,7 +113,8 @@ class Timer(Peripheral):
         self.reg = Timer.TimerRegister()
         self.sim.map_peripheral(self.pid, self.reg)
         self.sim.prerunhooks.append(self.update)
-        self.update();
+        self.th:Optional[asyncio.TimerHandle] = None
+        self.update()
 
     @staticmethod
     def create(sim:'Simulation', pid: int) -> Peripheral:
@@ -123,8 +124,20 @@ class Timer(Peripheral):
         now = asyncio.get_running_loop().time() - self.epoch
         self.reg.ticks = int(now * Timer.TICKS_PER_SEC)
 
-    def svc(self, p1:int, p2:int, p3:int) -> None:
-        raise NotImplementedError
+    def cancel(self) -> None:
+        if self.th is not None:
+            self.th.cancel()
+            self.th = None
+
+    def alarm(self) -> None:
+        self.sim.running.set()
+
+    def svc(self, fid:int, p1:int, p2:int, p3:int) -> None:
+        assert(fid == 0)
+        target = p2 | (p3 << 8)
+        self.cancel()
+        self.th = asyncio.get_running_loop().call_at(
+                self.epoch + (target / Timer.TICKS_PER_SEC), self.alarm)
 
 
 class Simulation:
@@ -133,9 +146,10 @@ class Simulation:
     EE_BASE     = 0x30000000
     PERIPH_BASE = 0x40000000
 
-    SVC_PANIC       = 0x0000
-    SVC_PERIPH_REG  = 0x0080
-    SVC_PERIPH_BASE = 0x1000
+    SVC_PANIC       = 0
+    SVC_PERIPH_REG  = 1
+    SVC_WFI         = 2
+    SVC_PERIPH_BASE = 0x01000000
 
     class ResetException(BaseException):
         pass
@@ -163,6 +177,7 @@ class Simulation:
         self.peripherals:Dict[int,Peripheral] = { }
         self.prerunhooks:List[PreRunHook] = []
 
+        self.running = asyncio.Event()
         self.ex:Optional[BaseException] = None
 
     def map_peripheral(self, pid:int, regs:'ctypes._CData') -> None:
@@ -203,6 +218,8 @@ class Simulation:
         self.emu.reg_write(uca.UC_ARM_REG_LR, 0xffffff10)
         self.emu.reg_write(uca.UC_ARM_REG_CPSR, 0x33)
 
+        self.running.set()
+
     def svc_panic(self, ptype:int, reason:int, addr:int, lr:int) -> None:
         raise RuntimeError(
                 f'PANIC: type={ptype} ({ {0: "ex", 1: "bl", 2: "fw"}.get(ptype, "??") })'
@@ -214,9 +231,14 @@ class Simulation:
                 UUID(bytes=bytes(self.emu.mem_read(uuid, 16))), self, pid)
         return True
 
+    def svc_wfi(self, p1:int, p2:int, p3:int, lr:int) -> bool:
+        self.running.clear()
+        return False
+
     svc_lookup = {
-            0   : svc_panic,
-            128 : svc_register,
+            SVC_PANIC      : svc_panic,
+            SVC_PERIPH_REG : svc_register,
+            SVC_WFI        : svc_wfi,
             }
 
     def _intr(self, intno:int) -> None:
@@ -236,10 +258,11 @@ class Simulation:
                     self.pc = lr
                     self.emu.emu_stop()
             else:
-                p = self.peripherals.get(svcid - Simulation.SVC_PERIPH_BASE)
+                pid = (svcid >> 16) & 0xff
+                p = self.peripherals.get(pid)
                 if p is None:
                     raise RuntimeError(f'Unknown peripheral ID {svcid-Simulation.SVC_PERIPH_BASE}, lr=0x{lr:08x}')
-                p.svc(*params)
+                p.svc(svcid & 0xffff, *params)
                 self.emu.reg_write(uca.UC_ARM_REG_PC, lr)
         else:
             raise RuntimeError('Unexpected interrupt {intno}, lr=0x{lr:08x}')
@@ -256,6 +279,7 @@ class Simulation:
             self.reset()
 
             while True:
+                await self.running.wait()
                 for prh in self.prerunhooks:
                     prh()
                 self.emu.emu_start(self.pc, 0xffffffff)

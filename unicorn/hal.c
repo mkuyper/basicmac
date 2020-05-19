@@ -16,51 +16,26 @@
 #include "fuota/frag.h"
 #endif
 
-enum {
-    SVC_PERIPH_REG = BOOT_SVC_FWBASE,
-
-    SVC_PERIPH_BASE = 0x1000,
-};
-
 static struct {
     boot_boottab* boottab;
     unsigned int irqlevel;
 } sim;
 
-static uint64_t svc64 (uint32_t id, uint32_t p1, uint32_t p2, uint32_t p3) {
-    return ((uint64_t (*) (uint32_t, uint32_t, uint32_t, uint32_t))
-            sim.boottab->svc)(id, p1, p2, p3);
-}
+void* HAL_svc;
 
-static uint32_t svc32 (uint32_t id, uint32_t p1, uint32_t p2, uint32_t p3) {
-    return ((uint32_t (*) (uint32_t, uint32_t, uint32_t, uint32_t))
-            sim.boottab->svc)(id, p1, p2, p3);
+static inline void wfi (void) {
+    ((void (*) (uint32_t)) HAL_svc)(SVC_WFI);
 }
-
-static void svc (uint32_t id, uint32_t p1, uint32_t p2, uint32_t p3) {
-    ((void (*) (uint32_t, uint32_t, uint32_t, uint32_t))
-     sim.boottab->svc)(id, p1, p2, p3);
-}
-
-void hal_periph_register (uint32_t id, const unsigned char* uuid) {
-    svc(SVC_PERIPH_REG, id, (uint32_t) uuid, 0);
-}
-
-void hal_periph_svc (uint32_t id, uint32_t p1, uint32_t p2, uint32_t p3) {
-    svc(SVC_PERIPH_BASE + id, p1, p2, p3);
-}
-
 
 void hal_init (void* bootarg) {
     sim.boottab = bootarg;
     ASSERT(sim.boottab->version >= 0x105); // require bootloader v261
 
-    debug_init();
+    HAL_svc = sim.boottab->svc;
+
+    dbg_init();
     timer_init();
 
-    debug_printf("time: %d\r\n", (uint32_t) *((uint64_t*) 0x40001000));
-
-    ASSERT(0);
 
     // TODO: RNG
 
@@ -81,6 +56,15 @@ void hal_init (void* bootarg) {
 #endif
 }
 
+#ifdef CFG_DEBUG
+void hal_debug_str (const char* str) {
+    dbg_str(str, strlen(str));
+}
+
+void hal_debug_led (int val) {
+}
+#endif
+
 void hal_watchcount (int cnt) {
 }
 
@@ -98,8 +82,16 @@ void hal_enableIRQs (void) {
     }
 }
 
+static uint64_t extend (uint32_t ticks) {
+    uint64_t c = timer_ticks();
+    return c + (((int32_t) ticks - (int32_t) c));
+}
+
 void hal_sleep (u1_t type, u4_t targettime) {
+    timer_set(extend(targettime));
+
     // TODO - sleep
+    wfi();
 }
 
 u4_t hal_ticks (void) {
@@ -107,8 +99,7 @@ u4_t hal_ticks (void) {
 }
 
 u8_t hal_xticks (void) {
-    // TODO - implement
-    return 0;
+    return timer_ticks();
 }
 
 void hal_waitUntil (u4_t time) {
@@ -120,6 +111,7 @@ void hal_waitUntil (u4_t time) {
             return;
         }
         // TODO - sleep
+        wfi();
     }
 }
 
@@ -150,19 +142,13 @@ void hal_failed (void) {
     // not reached
 }
 
-void radio_init (bool calibrate) {
-
+void hal_ant_switch (u1_t val) {
 }
-
-void os_radio (u1_t mode) {
+bool hal_pin_tcxo (u1_t val) {
+    return false;
 }
-
-#if 0
-u1_t radio_rand1 (void) {
-    // TODO - implement
-    return 0;
+void hal_irqmask_set (int mask) {
 }
-#endif
 
 #ifdef CFG_powerstats
 
