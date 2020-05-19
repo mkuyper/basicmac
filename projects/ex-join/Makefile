@@ -35,6 +35,9 @@ include ../projects.gmk
 
 ifeq (simul,$(VARIANT))
 test: build-$(VARIANT)/$(PROJECT).hex
+	/bin/false
+
+xxx-test: build-$(VARIANT)/$(PROJECT).hex
 	PYTHONPATH=$${PYTHONPATH}:$(TOPDIR)/tools/pylora:$(TOPDIR)/unicorn/simul \
 		   $(TOPDIR)/unicorn/simul/lwtest.py \
 		   -r EU868 \
