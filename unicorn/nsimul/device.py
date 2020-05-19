@@ -56,7 +56,7 @@ class Peripheral:
     def create(sim:'Simulation', pid: int) -> 'Peripheral':
         raise NotImplementedError
 
-    def svc(self, fid:int, p1:int, p2:int, p3:int) -> None:
+    def svc(self, fid:int) -> None:
         raise NotImplementedError
 
 class Peripherals:
@@ -85,16 +85,22 @@ PreRunHook = Callable[[], None]
 class DebugUnit(Peripheral):
     uuid = UUID('4c25d84a-9913-11ea-8de8-23fb8fc027a4')
 
-    def __init__(self, sim:'Simulation'):
+    @Peripherals.register
+    class DebugRegister(ctypes.LittleEndianStructure):
+        _fields_ = [('n', ctypes.c_uint32), ('s', ctypes.c_char * 1024)]
+
+    def __init__(self, sim:'Simulation', pid:int):
         self.sim = sim
+        self.reg = DebugUnit.DebugRegister()
+        self.sim.map_peripheral(pid, self.reg)
 
     @staticmethod
     def create(sim:'Simulation', pid: int) -> Peripheral:
-        return DebugUnit(sim)
+        return DebugUnit(sim, pid)
 
-    def svc(self, fid:int, p1:int, p2:int, p3:int) -> None:
+    def svc(self, fid:int) -> None:
         assert(fid == 0)
-        self.sim.log(self.sim.get_string(p1, p2))
+        self.sim.log(self.reg.s[:self.reg.n].decode('utf-8'))
 
 @Peripherals.add
 class Timer(Peripheral):
@@ -104,7 +110,7 @@ class Timer(Peripheral):
 
     @Peripherals.register
     class TimerRegister(ctypes.LittleEndianStructure):
-        _fields_ = [('ticks', ctypes.c_uint64)]
+        _fields_ = [('ticks', ctypes.c_uint64), ('target', ctypes.c_uint64)]
 
     def __init__(self, sim:'Simulation', pid:int):
         self.sim = sim
@@ -132,12 +138,11 @@ class Timer(Peripheral):
     def alarm(self) -> None:
         self.sim.running.set()
 
-    def svc(self, fid:int, p1:int, p2:int, p3:int) -> None:
+    def svc(self, fid:int) -> None:
         assert(fid == 0)
-        target = p2 | (p3 << 8)
         self.cancel()
         self.th = asyncio.get_running_loop().call_at(
-                self.epoch + (target / Timer.TICKS_PER_SEC), self.alarm)
+                self.epoch + (self.reg.target / Timer.TICKS_PER_SEC), self.alarm)
 
 
 class Simulation:
@@ -245,13 +250,13 @@ class Simulation:
         lr = self.emu.reg_read(uca.UC_ARM_REG_LR)
         if intno == 2: # SVC
             svcid = self.emu.reg_read(uca.UC_ARM_REG_R0)
-            params = (self.emu.reg_read(uca.UC_ARM_REG_R1),
-                    self.emu.reg_read(uca.UC_ARM_REG_R2),
-                    self.emu.reg_read(uca.UC_ARM_REG_R3))
             if svcid < Simulation.SVC_PERIPH_BASE:
                 handler = Simulation.svc_lookup.get(svcid)
                 if handler is None:
                     raise RuntimeError(f'Unknown SVCID {svcid}, lr=0x{lr:08x}')
+                params = (self.emu.reg_read(uca.UC_ARM_REG_R1),
+                        self.emu.reg_read(uca.UC_ARM_REG_R2),
+                        self.emu.reg_read(uca.UC_ARM_REG_R3))
                 if handler(self, *params, lr):
                     self.emu.reg_write(uca.UC_ARM_REG_PC, lr)
                 else:
@@ -262,7 +267,7 @@ class Simulation:
                 p = self.peripherals.get(pid)
                 if p is None:
                     raise RuntimeError(f'Unknown peripheral ID {svcid-Simulation.SVC_PERIPH_BASE}, lr=0x{lr:08x}')
-                p.svc(svcid & 0xffff, *params)
+                p.svc(svcid & 0xffff)
                 self.emu.reg_write(uca.UC_ARM_REG_PC, lr)
         else:
             raise RuntimeError('Unexpected interrupt {intno}, lr=0x{lr:08x}')

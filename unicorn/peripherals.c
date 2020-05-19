@@ -11,12 +11,8 @@
 #define PERIPH_BASE     0x40000000
 #define PERIPH_REG(pid) ((void*) (PERIPH_BASE | ((pid) << 12)))
 
-static inline void psvc_2 (uint32_t pid, uint32_t func, uint32_t p1, uint32_t p2) {
-    ((void (*) (uint32_t, uint32_t, uint32_t)) HAL_svc)(SVC_PERIPH_FUNC(pid, func), p1, p2);
-}
-
-static inline void psvc_64 (uint32_t pid, uint32_t func, uint64_t p1) {
-    ((void (*) (uint32_t, uint64_t)) HAL_svc)(SVC_PERIPH_FUNC(pid, func), p1);
+static inline void psvc (uint32_t pid, uint32_t func) {
+    ((void (*) (uint32_t)) HAL_svc)(SVC_PERIPH_FUNC(pid, func));
 }
 
 static inline void preg (uint32_t pid, const unsigned char* uuid) {
@@ -29,6 +25,11 @@ static inline void preg (uint32_t pid, const unsigned char* uuid) {
 //
 // Debug Unit
 
+typedef struct {
+    uint32_t n;
+    char s[1024];
+} dbg_reg;
+
 void dbg_init (void) {
     static const unsigned char uuid[16] = {
         0x4c, 0x25, 0xd8, 0x4a, 0x99, 0x13, 0x11, 0xea, 0x8d, 0xe8, 0x23, 0xfb, 0x8f, 0xc0, 0x27, 0xa4
@@ -39,9 +40,20 @@ void dbg_init (void) {
 #endif
 }
 
-void dbg_str (const char* str, int len) {
-    psvc_2(HAL_PID_DEBUG, 0, (uint32_t) str, strlen(str));
+#ifdef CFG_DEBUG
+void hal_debug_led (int val) {
 }
+
+void hal_debug_str (const char* str) {
+    dbg_reg* reg = PERIPH_REG(HAL_PID_DEBUG);
+    int i;
+    for( i = 0; i < sizeof(reg->s) && str[i]; i++ ) {
+        reg->s[i] = str[i];
+    }
+    reg->n = i;
+    psvc(HAL_PID_DEBUG, 0);
+}
+#endif
 
 
 // -----------------------------------------------------------------------------
@@ -51,6 +63,7 @@ void dbg_str (const char* str, int len) {
 
 typedef struct {
     uint64_t ticks;
+    uint64_t target;
 } timer_reg;
 
 
@@ -67,7 +80,9 @@ uint64_t timer_ticks (void) {
 }
 
 void timer_set (uint64_t target) {
-    psvc_64(HAL_PID_TIMER, 0, target);
+    timer_reg* reg = PERIPH_REG(HAL_PID_TIMER);
+    reg->target = target;
+    psvc(HAL_PID_TIMER, 0);
 }
 
 

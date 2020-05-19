@@ -56,14 +56,6 @@ void hal_init (void* bootarg) {
 #endif
 }
 
-#ifdef CFG_DEBUG
-void hal_debug_str (const char* str) {
-    dbg_str(str, strlen(str));
-}
-
-void hal_debug_led (int val) {
-}
-#endif
 
 void hal_watchcount (int cnt) {
 }
@@ -89,8 +81,6 @@ static uint64_t extend (uint32_t ticks) {
 
 void hal_sleep (u1_t type, u4_t targettime) {
     timer_set(extend(targettime));
-
-    // TODO - sleep
     wfi();
 }
 

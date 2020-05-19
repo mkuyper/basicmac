@@ -30,7 +30,6 @@ enum {
 };
 
 void dbg_init (void);
-void dbg_str (const char* str, int len);
 
 void timer_init (void);
 uint64_t timer_ticks (void);
