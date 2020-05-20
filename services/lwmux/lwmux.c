@@ -155,7 +155,7 @@ void lwm_slotparams (u4_t freq, dr_t dr, ostime_t interval, int slotsz, int miss
 
     state.bcn.slotsz = slotsz;
 
-    ostime_t t_bcn = calcAirTime(updr2rps(dr), 255);
+    ostime_t t_bcn = calcAirTime(LMIC_updr2rps(dr), 255);
     state.bcn.t_slots = interval - (ms2osticks(20) + t_bcn);
     ASSERT(state.bcn.t_slots > 0);
     state.bcn.off_slots = t_bcn + ms2osticks(10);
