@@ -393,7 +393,7 @@ class LWTest(LoRaWANTest):
             # check that the command is rejected for the correct reason, and
             # simultaneously ensure that the DlChannelAns is being repeated
             # while no DL is received
-            for i in range(16):
+            for i in range(32):
                 m = await self.lw_uplink()
                 opts = self.get_opts(m)
                 self.assert_equals(len(opts), 1)
