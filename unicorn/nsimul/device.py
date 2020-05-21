@@ -4,20 +4,19 @@
 # This file is subject to the terms and conditions defined in file 'LICENSE',
 # which is part of this source code package.
 
-from typing import cast, Any, Callable, Dict, List, Optional, TextIO, Tuple, Type
+from typing import cast, Callable, Dict, List, Optional, Type
 
-import argparse
-import ctypes
 import asyncio
+import ctypes
 import struct
-import sys
 
 import unicorn as uc
 import unicorn.arm_const as uca
 
-from colorama import Fore, Style, init as colorama_init
 from intelhex import IntelHex
 from uuid import UUID
+
+from eventhub import EventHub
 
 
 # -----------------------------------------------------------------------------
@@ -58,100 +57,6 @@ class Peripherals:
         if uuid not in Peripherals.peripherals:
             raise ValueError(f'Unknown peripheral {uuid}')
         return Peripherals.peripherals[uuid](sim, pid)
-
-
-# -----------------------------------------------------------------------------
-# Peripheral: Debug
-
-@Peripherals.add
-class DebugUnit(Peripheral):
-    uuid = UUID('4c25d84a-9913-11ea-8de8-23fb8fc027a4')
-
-    @Peripherals.register
-    class DebugRegister(ctypes.LittleEndianStructure):
-        _fields_ = [('n', ctypes.c_uint32), ('s', ctypes.c_ubyte * 1024)]
-
-    def init(self) -> None:
-        self.reg = DebugUnit.DebugRegister()
-        self.sim.map_peripheral(self.pid, self.reg)
-
-    def svc(self, fid:int) -> None:
-        assert fid == 0
-        self.sim.log(bytes(self.reg.s[:self.reg.n]).decode('utf-8'))
-
-
-# -----------------------------------------------------------------------------
-# Peripheral: Timer
-
-@Peripherals.add
-class Timer(Peripheral):
-    uuid = UUID('20c98436-994e-11ea-8de8-23fb8fc027a4')
-
-    TICKS_PER_SEC = 32768
-
-    @Peripherals.register
-    class TimerRegister(ctypes.LittleEndianStructure):
-        _fields_ = [('ticks', ctypes.c_uint64), ('target', ctypes.c_uint64)]
-
-    def init(self) -> None:
-        self.epoch = asyncio.get_running_loop().time()
-        self.reg = Timer.TimerRegister()
-        self.sim.map_peripheral(self.pid, self.reg)
-        self.sim.prerunhooks.append(self.update)
-        self.th:Optional[asyncio.TimerHandle] = None
-        self.update()
-
-    def update(self) -> None:
-        now = asyncio.get_running_loop().time() - self.epoch
-        self.reg.ticks = int(now * Timer.TICKS_PER_SEC)
-
-    def cancel(self) -> None:
-        if self.th is not None:
-            self.th.cancel()
-            self.th = None
-
-    def alarm(self) -> None:
-        self.sim.running.set()
-
-    def svc(self, fid:int) -> None:
-        assert fid == 0
-        self.cancel()
-        self.th = asyncio.get_running_loop().call_at(
-                self.epoch + (self.reg.target / Timer.TICKS_PER_SEC), self.alarm)
-
-
-# -----------------------------------------------------------------------------
-# Events / Logging
-
-class EventHub:
-    LOG  = 0
-    LORA = 1
-
-    def event(self, type:int, **kwargs:Any) -> None:
-        raise NotImplementedError
-
-    def log(self, src:Any, msg:str) -> None:
-        self.event(EventHub.LOG, src=src, msg=msg)
-
-class LogWriter:
-    def __init__(self, buf:TextIO) -> None:
-        self.buf = buf
-
-    def write(self, s:str, **kwargs:Any) -> None:
-        self.buf.write(s)
-
-class ColoramaStream(LogWriter):
-    def write(self, s:str, style:str='', **kwargs:Any) -> None:
-        super().write(f'{style}{s}{Style.RESET_ALL}')
-
-class LoggingEventHub(EventHub):
-    def __init__(self, writer:LogWriter) -> None:
-        self.writer = writer
-
-    def event(self, type:int, **kwargs:Any) -> None:
-        if type == EventHub.LOG:
-            self.writer.write(cast(str, kwargs['msg']), style=Fore.BLUE)
-
 
 # -----------------------------------------------------------------------------
 # Device Simulation
@@ -311,19 +216,4 @@ class Simulation:
                 if self.ex is not None:
                     raise self.ex
 
-
-if __name__ == '__main__':
-    p = argparse.ArgumentParser()
-    p.add_argument('-v', '--virtual-time', action='store_true',
-            help='Use virtual time')
-    p.add_argument('hexfiles', metavar='HEXFILE', nargs='+',
-            help='Firmware files to load')
-    args = p.parse_args()
-
-    log = LoggingEventHub(ColoramaStream(sys.stdout))
-
-    sim = Simulation(evhub=log)
-    for hf in args.hexfiles:
-        sim.load_hexfile(hf)
-
-    asyncio.get_event_loop().run_until_complete(sim.run())
+import peripherals
