@@ -21,6 +21,24 @@ static inline void preg (uint32_t pid, const unsigned char* uuid) {
 
 
 // -----------------------------------------------------------------------------
+// 439a2c60-ac1b-11ea-99f0-d1119d1d4e55
+//
+// Nested Vectored Interrupt Controller
+
+typedef struct {
+    uint32_t vtor[128];
+    uint8_t prio[128];
+} nvic_reg;
+
+void nvic_init (void) {
+    static const unsigned char uuid[16] = {
+        0x43, 0x9a, 0x2c, 0x60, 0xac, 0x1b, 0x11, 0xea, 0x99, 0xf0, 0xd1, 0x11, 0x9d, 0x1d, 0x4e, 0x55
+    };
+    preg(HAL_PID_NVIC, uuid);
+}
+
+
+// -----------------------------------------------------------------------------
 // 4c25d84a-9913-11ea-8de8-23fb8fc027a4
 //
 // Debug Unit
@@ -87,9 +105,16 @@ void timer_set (uint64_t target) {
 
 
 // -----------------------------------------------------------------------------
-// ???
+// 3888937c-ab4c-11ea-aeed-27009b59e638
 //
 // Radio
+
+void radio_halinit (void) {
+    static const unsigned char uuid[16] = {
+        0x38, 0x88, 0x93, 0x7c, 0xab, 0x4c, 0x11, 0xea, 0xae, 0xed, 0x27, 0x00, 0x9b, 0x59, 0xe6, 0x38
+    };
+    preg(HAL_PID_RADIO, uuid);
+}
 
 void radio_init (bool calibrate) {}
 

@@ -4,7 +4,7 @@
 # This file is subject to the terms and conditions defined in file 'LICENSE',
 # which is part of this source code package.
 
-from typing import cast, Callable, Dict, List, Optional, Type
+from typing import cast, Callable, Dict, List, Optional, Tuple, Type
 
 import asyncio
 import ctypes
@@ -36,6 +36,7 @@ class Peripheral:
     def svc(self, fid:int) -> None:
         raise NotImplementedError
 
+
 class Peripherals:
     peripherals:Dict[UUID,Type[Peripheral]] = {}
 
@@ -58,12 +59,30 @@ class Peripherals:
             raise ValueError(f'Unknown peripheral {uuid}')
         return Peripherals.peripherals[uuid](sim, pid)
 
+
+class IrqHandler:
+    def requested(self) -> bool:
+        return False
+
+    def handler(self) -> Optional[int]:
+        raise NotImplementedError
+
+    def done(self) -> None:
+        pass
+
+    def set(self, pid:int) -> Optional[int]:
+        raise NotImplementedError
+
+    def clear(self, pid:int) -> Optional[int]:
+        raise NotImplementedError
+
+
 # -----------------------------------------------------------------------------
 # Device Simulation
 
 PreRunHook = Callable[[], None]
 
-class Simulation:
+class Simulation(IrqHandler):
     RAM_BASE    = 0x10000000
     FLASH_BASE  = 0x20000000
     EE_BASE     = 0x30000000
@@ -78,6 +97,10 @@ class Simulation:
     class ResetException(BaseException):
         pass
 
+    @staticmethod
+    def default_irq_handler() -> int:
+        raise NotImplementedError
+
     def __init__(self, ramsz:int=16*1024, flashsz:int=128*1024, eesz:int=8*1024,
             uniqueid:int=0xdeadbeef, evhub:Optional[EventHub]=None) -> None:
         self.emu = uc.Uc(uc.UC_ARCH_ARM, uc.UC_MODE_THUMB)
@@ -86,10 +109,10 @@ class Simulation:
         #        lambda uc, addr, size, sim: sim.trace(addr), self)
         self.emu.hook_add(uc.UC_HOOK_INTR,
                 lambda uc, intno, sim: sim.intr(intno), self)
-        #self.emu.hook_add(uc.UC_HOOK_BLOCK,
-        #        lambda uc, address, size, sim:
-        #        sim.block_special(address), self,
-        #        begin=0xfffff000, end=0xffffffff)
+        self.emu.hook_add(uc.UC_HOOK_BLOCK,
+                lambda uc, address, size, sim:
+                sim.irq_return(address), self,
+                begin=0xfffff000, end=0xffffffff)
 
         self.emu.mem_map(Simulation.RAM_BASE, ramsz)
         self.emu.mem_map(Simulation.FLASH_BASE, flashsz)
@@ -130,11 +153,35 @@ class Simulation:
     def get_string(self, addr:int, length:int) -> str:
         return cast(bytes, self.emu.mem_read(addr, length)).decode('utf-8')
 
+    def get_cpsr(self) -> int:
+        return cast(int, self.emu.reg_read(uca.UC_ARM_REG_CPSR))
+
+    def irq_enabled(self) -> bool:
+        return (self.get_cpsr() & (1 << 7)) == 0
+
+    def stack_push(self, value:int) -> None:
+        sp = self.emu.reg_read(uca.UC_ARM_REG_SP) - 4
+        self.emu.mem_write(sp, struct.pack('<I', value))
+        self.emu.reg_write(uca.UC_ARM_REG_SP, sp)
+
+    def stack_pop(self) -> int:
+        sp = self.emu.reg_read(uca.UC_ARM_REG_SP)
+        (value,) = cast(Tuple[int], struct.unpack('<I', self.emu.mem_read(sp, 4)))
+        self.emu.reg_write(uca.UC_ARM_REG_SP, sp + 4)
+        return value
+
+    def irq_return(self, addr:int) -> None:
+        assert addr == 0xfffffff0, f'Unknown special PC: 0x{addr:08x}'
+        self.pc = self.stack_pop()
+        self.emu.emu_stop()
+        self.irqhandler.done()
+
     def reset(self) -> None:
         # read SP and entry point address from header in flash
         (sp, ep) = struct.unpack('<II',
                 self.emu.mem_read(Simulation.FLASH_BASE, 8))
 
+        self.irqhandler:IrqHandler = self
         self.peripherals.clear()
         self.prerunhooks.clear()
 
@@ -145,24 +192,30 @@ class Simulation:
 
         self.running.set()
 
-    def svc_panic(self, ptype:int, reason:int, addr:int, lr:int) -> None:
+    def svc_panic(self) -> bool:
+        ptype  = self.emu.reg_read(uca.UC_ARM_REG_R1)
+        reason = self.emu.reg_read(uca.UC_ARM_REG_R2)
+        addr   = self.emu.reg_read(uca.UC_ARM_REG_R3)
+        lr     = self.emu.reg_read(uca.UC_ARM_REG_LR)
         raise RuntimeError(
                 f'PANIC: type={ptype} ({ {0: "ex", 1: "bl", 2: "fw"}.get(ptype, "??") })'
                 f', reason={reason} (0x{reason:x})'
                 f', addr=0x{addr:08x}, lr=0x{lr:08x}')
 
-    def svc_register(self, pid:int, uuid:int, p3:int, lr:int) -> bool:
+    def svc_register(self) -> bool:
+        pid  = self.emu.reg_read(uca.UC_ARM_REG_R1)
+        uuid = self.emu.reg_read(uca.UC_ARM_REG_R2)
         self.peripherals[pid] = Peripherals.create(
                 UUID(bytes=bytes(self.emu.mem_read(uuid, 16))), self, pid)
         return True
 
-    def svc_wfi(self, p1:int, p2:int, p3:int, lr:int) -> bool:
-        self.running.clear()
+    def svc_wfi(self) -> bool:
+        if not self.irqhandler.requested():
+            self.running.clear()
         return False
 
-    def svc_irq(self, p1:int, p2:int, p3:int, lr:int) -> bool:
-        # TODO - implement
-        return True
+    def svc_irq(self) -> bool:
+        return False
 
     svc_lookup = {
             SVC_PANIC      : svc_panic,
@@ -179,10 +232,7 @@ class Simulation:
                 handler = Simulation.svc_lookup.get(svcid)
                 if handler is None:
                     raise RuntimeError(f'Unknown SVCID {svcid}, lr=0x{lr:08x}')
-                params = (self.emu.reg_read(uca.UC_ARM_REG_R1),
-                        self.emu.reg_read(uca.UC_ARM_REG_R2),
-                        self.emu.reg_read(uca.UC_ARM_REG_R3))
-                if handler(self, *params, lr):
+                if handler(self):
                     self.emu.reg_write(uca.UC_ARM_REG_PC, lr)
                 else:
                     self.pc = lr
@@ -210,9 +260,16 @@ class Simulation:
 
             while True:
                 await self.running.wait()
+                if self.irqhandler.requested() and (pc := self.irqhandler.handler()) is not None:
+                    # push LR to stack
+                    self.stack_push(self.emu.reg_read(uca.UC_ARM_REG_LR))
+                    # set LR to magic value
+                    self.emu.reg_write(uca.UC_ARM_REG_LR, 0xfffffff1)
+                else:
+                    pc = self.pc
                 for prh in self.prerunhooks:
                     prh()
-                self.emu.emu_start(self.pc, 0xffffffff)
+                self.emu.emu_start(pc, 0xffffffff)
                 if self.ex is not None:
                     raise self.ex
 

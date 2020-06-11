@@ -37,8 +37,11 @@ void hal_init (void* bootarg) {
 
     HAL_svc = sim.boottab->svc;
 
+    // peripherals
+    nvic_init();
     dbg_init();
     timer_init();
+    radio_halinit();
 
 
     // TODO: RNG

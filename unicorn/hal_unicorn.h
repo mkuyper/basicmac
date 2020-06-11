@@ -24,17 +24,23 @@ extern void* HAL_svc;
 
 // peripherals
 enum {
+    HAL_PID_NVIC,
     HAL_PID_DEBUG,
     HAL_PID_TIMER,
+    HAL_PID_RADIO,
 
     HAL_PID_COUNT
 };
+
+void nvic_init (void);
 
 void dbg_init (void);
 
 void timer_init (void);
 uint64_t timer_ticks (void);
 void timer_set (uint64_t target);
+
+void radio_halinit (void);
 
 uint32_t pio_irq_get (void);
 void pio_irq_clear (uint32_t mask);

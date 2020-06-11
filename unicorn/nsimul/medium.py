@@ -65,7 +65,7 @@ class Medium:
     EV_TX_COMPLETE = 2
     EV_TX_ABORT    = 3
 
-    def event(self, ev:int, msg:LoraMsg) -> None:
+    def event(self, ev:int, msg:'LoraMsg') -> None:
         print(f'ev={ev}, msg={msg}')
         pass
 
@@ -151,9 +151,12 @@ class LoraMsg:
             await asyncio.sleep(tdiff)
 
     async def transmit(self, medium:Medium) -> None:
-        await LoraMsg.wait_until(self.xbeg)
-        medium.event(Medium.EV_TX_PREAMBLE, self)
-        await LoraMsg.wait_until(self.xpld)
-        medium.event(Medium.EV_TX_PAYLOAD, self)
-        await LoraMsg.wait_until(self.xend)
-        medium.event(Medium.EV_TX_COMPLETE, self)
+        try:
+            await LoraMsg.wait_until(self.xbeg)
+            medium.event(Medium.EV_TX_PREAMBLE, self)
+            await LoraMsg.wait_until(self.xpld)
+            medium.event(Medium.EV_TX_PAYLOAD, self)
+            await LoraMsg.wait_until(self.xend)
+            medium.event(Medium.EV_TX_COMPLETE, self)
+        except asyncio.CancelledError:
+            medium.event(Medium.EV_TX_ABORT, self)
