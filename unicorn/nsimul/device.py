@@ -4,7 +4,7 @@
 # This file is subject to the terms and conditions defined in file 'LICENSE',
 # which is part of this source code package.
 
-from typing import cast, Callable, Dict, List, Optional, Tuple, Type
+from typing import cast, Any, Callable, Dict, List, Optional, Tuple, Type
 
 import asyncio
 import ctypes
@@ -81,6 +81,7 @@ class IrqHandler:
 # Device Simulation
 
 PreRunHook = Callable[[], None]
+Context = Dict[str, Any]
 
 class Simulation(IrqHandler):
     RAM_BASE    = 0x10000000
@@ -101,27 +102,28 @@ class Simulation(IrqHandler):
     def default_irq_handler() -> int:
         raise NotImplementedError
 
-    def __init__(self, ramsz:int=16*1024, flashsz:int=128*1024, eesz:int=8*1024,
-            uniqueid:int=0xdeadbeef, evhub:Optional[EventHub]=None) -> None:
+    def __init__(self, *, context:Context={}) -> None:
         self.emu = uc.Uc(uc.UC_ARCH_ARM, uc.UC_MODE_THUMB)
+
+        self.context = context
 
         #self.emu.hook_add(uc.UC_HOOK_CODE,
         #        lambda uc, addr, size, sim: sim.trace(addr), self)
         self.emu.hook_add(uc.UC_HOOK_INTR,
                 lambda uc, intno, sim: sim.intr(intno), self)
+
+        self.emu.mem_map(0xfffff000, 0x1000) # special (return from interrupt)
         self.emu.hook_add(uc.UC_HOOK_BLOCK,
                 lambda uc, address, size, sim:
                 sim.irq_return(address), self,
                 begin=0xfffff000, end=0xffffffff)
 
-        self.emu.mem_map(Simulation.RAM_BASE, ramsz)
-        self.emu.mem_map(Simulation.FLASH_BASE, flashsz)
-        if eesz:
+        self.emu.mem_map(Simulation.RAM_BASE, context.get('sim.ramsz', 16*1024))
+        self.emu.mem_map(Simulation.FLASH_BASE, context.get('sim.flashsz', 128*1024))
+        if (eesz := context.get('sim.eesz', 8*1024)):
             self.emu.mem_map(Simulation.EE_BASE, eesz)
-        self.emu.mem_map(0xfffff000, 0x1000) # special (return from interrupt)
 
-        self.uniqueid = uniqueid
-        self.evhub = evhub
+        self.evhub:Optional[EventHub] = context.get('evhub')
         self.peripherals:Dict[int,Peripheral] = { }
         self.prerunhooks:List[PreRunHook] = []
 

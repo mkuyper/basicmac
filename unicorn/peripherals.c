@@ -35,6 +35,14 @@ void nvic_init (void) {
         0x43, 0x9a, 0x2c, 0x60, 0xac, 0x1b, 0x11, 0xea, 0x99, 0xf0, 0xd1, 0x11, 0x9d, 0x1d, 0x4e, 0x55
     };
     preg(HAL_PID_NVIC, uuid);
+
+    nvic_reg* reg = PERIPH_REG(HAL_PID_NVIC);
+    memset(reg, 0, sizeof(nvic_reg));
+}
+
+void nvic_sethandler (uint32_t pid, void* handler) {
+    nvic_reg* reg = PERIPH_REG(HAL_PID_NVIC);
+    reg->vtor[pid] = (uint32_t) handler;
 }
 
 
@@ -84,7 +92,6 @@ typedef struct {
     uint64_t target;
 } timer_reg;
 
-
 void timer_init (void) {
     static const unsigned char uuid[16] = {
         0x20, 0xc9, 0x84, 0x36, 0x99, 0x4e, 0x11, 0xea, 0x8d, 0xe8, 0x23, 0xfb, 0x8f, 0xc0, 0x27, 0xa4
@@ -109,20 +116,54 @@ void timer_set (uint64_t target) {
 //
 // Radio
 
+typedef struct {
+    uint8_t buf[256];
+    uint32_t plen;
+    uint32_t freq;
+    uint32_t rps;
+    uint32_t xpow;
+    uint32_t rssi;
+    uint32_t snr;
+    uint32_t npreamble;
+} radio_reg;
+
+enum {
+    RADIO_PSVC_TX,
+};
+
+static void radio_irq (void) {
+    debug_printf("radio_irq()\r\n");
+}
+
 void radio_halinit (void) {
     static const unsigned char uuid[16] = {
         0x38, 0x88, 0x93, 0x7c, 0xab, 0x4c, 0x11, 0xea, 0xae, 0xed, 0x27, 0x00, 0x9b, 0x59, 0xe6, 0x38
     };
     preg(HAL_PID_RADIO, uuid);
+    nvic_sethandler(HAL_PID_RADIO, radio_irq);
 }
 
 void radio_init (bool calibrate) {}
 
 bool radio_irq_process (ostime_t irqtime, u1_t diomask) { return true; }
-void radio_starttx (bool txcontinuous) {}
+
+void radio_starttx (bool txcontinuous) {
+    radio_reg* reg = PERIPH_REG(HAL_PID_RADIO);
+
+    ASSERT(LMIC.dataLen <= sizeof(reg->buf));
+    memcpy(reg->buf, LMIC.frame, LMIC.dataLen);
+    reg->plen = LMIC.dataLen;
+
+    reg->freq = LMIC.freq;
+    reg->rps = LMIC.rps;
+    reg->xpow = LMIC.txpow + LMIC.brdTxPowOff;
+    reg->npreamble = 8;
+
+    psvc(HAL_PID_RADIO, RADIO_PSVC_TX);
+}
+
 void radio_startrx (bool rxcontinuous) {}
 void radio_sleep (void) {}
 void radio_cca (void) {}
 void radio_cad (void) {}
 void radio_cw (void) {}
-

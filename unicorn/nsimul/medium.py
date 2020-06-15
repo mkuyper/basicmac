@@ -9,7 +9,6 @@ from typing import Optional, Tuple
 import asyncio
 import math
 
-
 class Rps:
     @staticmethod
     def makeRps(sf:int=7, bw:int=125000, cr:int=1, crc:int=1, ih:int=0) -> int:
@@ -66,7 +65,6 @@ class Medium:
     EV_TX_ABORT    = 3
 
     def event(self, ev:int, msg:'LoraMsg') -> None:
-        print(f'ev={ev}, msg={msg}')
         pass
 
 class LoraMsg:

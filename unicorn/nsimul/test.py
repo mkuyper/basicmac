@@ -21,7 +21,7 @@ if __name__ == '__main__':
 
     log = LoggingEventHub(ColoramaStream(sys.stdout))
 
-    sim = Simulation(evhub=log)
+    sim = Simulation(context={ 'evhub': log })
     for hf in args.hexfiles:
         sim.load_hexfile(hf)
 

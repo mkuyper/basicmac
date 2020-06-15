@@ -3,7 +3,7 @@
 # This file is subject to the terms and conditions defined in file 'LICENSE',
 # which is part of this source code package.
 
-from typing import List, Optional, Set
+from typing import Any, List, Optional, Set
 
 import asyncio
 import ctypes
@@ -11,6 +11,7 @@ import ctypes
 from uuid import UUID
 
 from device import IrqHandler, Peripheral, Peripherals, Simulation
+from medium import LoraMsg, Medium
 
 
 # -----------------------------------------------------------------------------
@@ -127,11 +128,27 @@ class Radio(Peripheral):
 
     @Peripherals.register
     class RadioRegister(ctypes.LittleEndianStructure):
-        _fields_ = [('ticks', ctypes.c_uint64), ('target', ctypes.c_uint64)]
+        _fields_ = [('buf', ctypes.c_ubyte*256), *[(r, ctypes.c_uint32) for r in ('plen', 'freq', 'rps', 'xpow', 'rssi', 'snr', 'npreamble')]]
 
     def init(self) -> None:
         self.reg = Radio.RadioRegister()
         self.sim.map_peripheral(self.pid, self.reg)
+        self.medium:Medium = self.sim.context.get('medium', Medium())
+
+    def txdone(self, fut:'asyncio.Future[Any]') -> None:
+        print(f'txdone')
+        self.sim.irqhandler.set(self.pid)
+
+    def svc_tx(self) -> None:
+        now = asyncio.get_running_loop().time()
+        msg = LoraMsg(now, bytes(self.reg.buf[:self.reg.plen]), self.reg.freq, self.reg.rps,
+                xpow=self.reg.xpow, npreamble=self.reg.npreamble)
+        t = asyncio.ensure_future(msg.transmit(self.medium))
+        t.add_done_callback(self.txdone)
+
+    svc_lookup = {
+            0: svc_tx,
+            }
 
     def svc(self, fid:int) -> None:
-        assert False
+        Radio.svc_lookup[fid](self)

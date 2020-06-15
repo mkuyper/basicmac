@@ -33,6 +33,7 @@ enum {
 };
 
 void nvic_init (void);
+void nvic_sethandler (uint32_t pid, void* handler);
 
 void dbg_init (void);
 

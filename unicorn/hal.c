@@ -43,7 +43,6 @@ void hal_init (void* bootarg) {
     timer_init();
     radio_halinit();
 
-
     // TODO: RNG
 
     hal_pd_init();
