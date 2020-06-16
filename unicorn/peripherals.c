@@ -125,14 +125,28 @@ typedef struct {
     uint32_t rssi;
     uint32_t snr;
     uint32_t npreamble;
+    uint32_t diomask;
 } radio_reg;
 
 enum {
+    RADIO_PSVC_RESET,
     RADIO_PSVC_TX,
+    RADIO_PSVC_RX,
+    RADIO_PSVC_CLEARIRQ,
+};
+
+enum {
+    RADIO_DIO_TXDONE = (1 << 0),
+    RADIO_DIO_RXDONE = (1 << 1),
+    RADIO_DIO_RXTOUT = (1 << 2),
 };
 
 static void radio_irq (void) {
     debug_printf("radio_irq()\r\n");
+    radio_reg* reg = PERIPH_REG(HAL_PID_RADIO);
+    uint32_t diomask = reg->diomask;
+    psvc(HAL_PID_RADIO, RADIO_PSVC_CLEARIRQ);
+    radio_irq_handler(diomask, os_getTime());
 }
 
 void radio_halinit (void) {
@@ -143,11 +157,20 @@ void radio_halinit (void) {
     nvic_sethandler(HAL_PID_RADIO, radio_irq);
 }
 
-void radio_init (bool calibrate) {}
+void radio_init (bool calibrate) {
+    debug_printf("radio_init(calibrate=%d)\r\n", calibrate);
+}
 
-bool radio_irq_process (ostime_t irqtime, u1_t diomask) { return true; }
+bool radio_irq_process (ostime_t irqtime, u1_t diomask) {
+    if( diomask & RADIO_DIO_TXDONE) {
+        LMIC.txend = irqtime;
+    }
+    return true;
+}
 
 void radio_starttx (bool txcontinuous) {
+    ASSERT(txcontinuous == 0);
+
     radio_reg* reg = PERIPH_REG(HAL_PID_RADIO);
 
     ASSERT(LMIC.dataLen <= sizeof(reg->buf));
@@ -162,7 +185,20 @@ void radio_starttx (bool txcontinuous) {
     psvc(HAL_PID_RADIO, RADIO_PSVC_TX);
 }
 
-void radio_startrx (bool rxcontinuous) {}
+void radio_startrx (bool rxcontinuous) {
+    ASSERT(rxcontinuous == 0);
+
+    radio_reg* reg = PERIPH_REG(HAL_PID_RADIO);
+
+    reg->freq = LMIC.freq;
+    reg->rps = LMIC.rps;
+    reg->npreamble = LMIC.rxsyms;
+
+    // TODO - IQ inversion
+
+    psvc(HAL_PID_RADIO, RADIO_PSVC_RX);
+}
+
 void radio_sleep (void) {}
 void radio_cca (void) {}
 void radio_cad (void) {}

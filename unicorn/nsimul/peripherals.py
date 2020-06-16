@@ -128,7 +128,7 @@ class Radio(Peripheral):
 
     @Peripherals.register
     class RadioRegister(ctypes.LittleEndianStructure):
-        _fields_ = [('buf', ctypes.c_ubyte*256), *[(r, ctypes.c_uint32) for r in ('plen', 'freq', 'rps', 'xpow', 'rssi', 'snr', 'npreamble')]]
+        _fields_ = [('buf', ctypes.c_ubyte*256), *[(r, ctypes.c_uint32) for r in ('plen', 'freq', 'rps', 'xpow', 'rssi', 'snr', 'npreamble', 'diomask')]]
 
     def init(self) -> None:
         self.reg = Radio.RadioRegister()
@@ -137,7 +137,18 @@ class Radio(Peripheral):
 
     def txdone(self, fut:'asyncio.Future[Any]') -> None:
         print(f'txdone')
+        self.reg.diomask = 1
         self.sim.irqhandler.set(self.pid)
+
+    def svc_reset(self) -> None:
+        pass
+
+    def svc_clearirq(self) -> None:
+        self.reg.diomask = 0
+        self.sim.irqhandler.clear(self.pid)
+
+    def svc_rx(self) -> None:
+        raise NotImplementedError
 
     def svc_tx(self) -> None:
         now = asyncio.get_running_loop().time()
@@ -147,7 +158,10 @@ class Radio(Peripheral):
         t.add_done_callback(self.txdone)
 
     svc_lookup = {
-            0: svc_tx,
+            0: svc_reset,
+            1: svc_tx,
+            2: svc_rx,
+            3: svc_clearirq,
             }
 
     def svc(self, fid:int) -> None:
