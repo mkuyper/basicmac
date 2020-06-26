@@ -118,6 +118,7 @@ void timer_set (uint64_t target) {
 
 typedef struct {
     uint8_t buf[256];
+    uint64_t xtime;
     uint32_t plen;
     uint32_t freq;
     uint32_t rps;
@@ -125,7 +126,7 @@ typedef struct {
     uint32_t rssi;
     uint32_t snr;
     uint32_t npreamble;
-    uint32_t diomask;
+    uint32_t status;
 } radio_reg;
 
 enum {
@@ -136,17 +137,18 @@ enum {
 };
 
 enum {
-    RADIO_DIO_TXDONE = (1 << 0),
-    RADIO_DIO_RXDONE = (1 << 1),
-    RADIO_DIO_RXTOUT = (1 << 2),
+    RADIO_S_IDLE,
+    RADIO_S_BUSY,
+    RADIO_S_TXDONE,
+    RADIO_S_RXDONE,
+    RADIO_S_RXTOUT,
 };
 
 static void radio_irq (void) {
     debug_printf("radio_irq()\r\n");
-    radio_reg* reg = PERIPH_REG(HAL_PID_RADIO);
-    uint32_t diomask = reg->diomask;
     psvc(HAL_PID_RADIO, RADIO_PSVC_CLEARIRQ);
-    radio_irq_handler(diomask, os_getTime());
+    radio_reg* reg = PERIPH_REG(HAL_PID_RADIO);
+    radio_irq_handler(0, reg->xtime);
 }
 
 void radio_halinit (void) {
@@ -162,8 +164,35 @@ void radio_init (bool calibrate) {
 }
 
 bool radio_irq_process (ostime_t irqtime, u1_t diomask) {
-    if( diomask & RADIO_DIO_TXDONE) {
-        LMIC.txend = irqtime;
+    radio_reg* reg = PERIPH_REG(HAL_PID_RADIO);
+    switch( reg->status ) {
+        case RADIO_S_TXDONE:
+            LMIC.txend = irqtime;
+            break;
+        case RADIO_S_RXDONE:
+            LMIC.rssi = reg->rssi;
+            LMIC.snr = reg->snr;
+            LMIC.dataLen = reg->plen;
+            LMIC.rxtime = irqtime;
+	    LMIC.rxtime0 = LMIC.rxtime - calcAirTime(LMIC.rps, LMIC.dataLen); // beginning of frame timestamp
+            memcpy(LMIC.frame, reg->buf, LMIC.dataLen);
+#ifdef DEBUG_RX
+            // XXX would be nice if this could be shared with other radio drivers... (radio.c)
+	    debug_printf("RX[freq=%.1F,sf=%d,bw=%d,rssi=%d,snr=%.2F,len=%d]: %.80h\r\n",
+			 LMIC.freq, 6, getSf(LMIC.rps) + 6, 125 << getBw(LMIC.rps),
+			 LMIC.rssi - RSSI_OFF, LMIC.snr * 100 / SNR_SCALEUP, 2,
+			 LMIC.dataLen, LMIC.frame, LMIC.dataLen);
+#endif
+            break;
+        case RADIO_S_RXTOUT:
+            // indicate timeout
+            LMIC.dataLen = 0;
+#ifdef DEBUG_RX
+            // XXX would be nice if this could be shared with other radio drivers... (radio.c)
+            debug_printf("RX[freq=%.1F,sf=%d,bw=%d]: TIMEOUT\r\n",
+                    LMIC.freq, 6, getSf(LMIC.rps) + 6, 125 << getBw(LMIC.rps));
+#endif
+            break;
     }
     return true;
 }
@@ -190,6 +219,7 @@ void radio_startrx (bool rxcontinuous) {
 
     radio_reg* reg = PERIPH_REG(HAL_PID_RADIO);
 
+    reg->xtime = LMIC.rxtime; // XXX - extend to xticks!
     reg->freq = LMIC.freq;
     reg->rps = LMIC.rps;
     reg->npreamble = LMIC.rxsyms;

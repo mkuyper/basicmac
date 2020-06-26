@@ -9,9 +9,19 @@ import sys
 
 from device import Simulation
 from eventhub import ColoramaStream, LoggingEventHub
+from lorawan import UniversalGateway
+from medium import LoraMsg, SimpleMedium
+from runtime import Runtime
 
 
-if __name__ == '__main__':
+async def gwloop(gw:UniversalGateway) -> None:
+    while True:
+        msg = await gw.next_up()
+        print(f'gw recv: {msg}')
+        nmsg = LoraMsg(msg.xend + 5, bytes.fromhex('0102030405060708'), freq=msg.freq, rps=msg.rps | 0x80)
+        gw.sched_dn(nmsg)
+
+async def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument('-v', '--virtual-time', action='store_true',
             help='Use virtual time')
@@ -19,10 +29,19 @@ if __name__ == '__main__':
             help='Firmware files to load')
     args = p.parse_args()
 
-    log = LoggingEventHub(ColoramaStream(sys.stdout))
+    rt = Runtime()
 
-    sim = Simulation(context={ 'evhub': log })
+    log = LoggingEventHub(ColoramaStream(sys.stdout))
+    med = SimpleMedium()
+
+    gw = UniversalGateway(rt, med)
+
+    sim = Simulation(rt, context={ 'evhub': log, 'medium': med})
     for hf in args.hexfiles:
         sim.load_hexfile(hf)
 
-    asyncio.get_event_loop().run_until_complete(sim.run())
+    await asyncio.gather(gwloop(gw), sim.run())
+
+
+if __name__ == '__main__':
+    asyncio.get_event_loop().run_until_complete(main())

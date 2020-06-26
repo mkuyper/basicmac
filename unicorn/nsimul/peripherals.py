@@ -11,7 +11,8 @@ import ctypes
 from uuid import UUID
 
 from device import IrqHandler, Peripheral, Peripherals, Simulation
-from medium import LoraMsg, Medium
+from medium import LoraMsg, LoraMsgReceiver, Medium
+from runtime import Clock, Job, Runtime
 
 
 # -----------------------------------------------------------------------------
@@ -83,7 +84,7 @@ class DebugUnit(Peripheral):
 # Peripheral: Timer
 
 @Peripherals.add
-class Timer(Peripheral):
+class Timer(Peripheral, Clock):
     uuid = UUID('20c98436-994e-11ea-8de8-23fb8fc027a4')
 
     TICKS_PER_SEC = 32768
@@ -97,12 +98,29 @@ class Timer(Peripheral):
         self.reg = Timer.TimerRegister()
         self.sim.map_peripheral(self.pid, self.reg)
         self.sim.prerunhooks.append(self.update)
+        self.sim.runtime.setclock(self)
         self.th:Optional[asyncio.TimerHandle] = None
         self.update()
 
     def update(self) -> None:
-        now = asyncio.get_running_loop().time() - self.epoch
-        self.reg.ticks = int(now * Timer.TICKS_PER_SEC)
+        self.reg.ticks = self.time2ticks(asyncio.get_running_loop().time())
+
+    def time(self, update:bool=False) -> float:
+        return self.ticks2time(self.ticks(update))
+
+    def ticks(self, update:bool=False) -> int:
+        if update:
+            self.update()
+        return int(self.reg.ticks)
+
+    def ticks2time(self, ticks:int) -> float:
+        return self.epoch + (ticks / Timer.TICKS_PER_SEC)
+
+    def time2ticks(self, time:float) -> int:
+        return int((time - self.epoch) * Timer.TICKS_PER_SEC)
+
+    def sec2ticks(self, sec:float) -> int:
+        return round(sec * Timer.TICKS_PER_SEC)
 
     def cancel(self) -> None:
         if self.th is not None:
@@ -126,36 +144,55 @@ class Timer(Peripheral):
 class Radio(Peripheral):
     uuid = UUID('3888937c-ab4c-11ea-aeed-27009b59e638')
 
+    S_IDLE   = 0
+    S_BUSY   = 1
+    S_TXDONE = 2
+    S_RXDONE = 3
+    S_RXTOUT = 4
+
     @Peripherals.register
     class RadioRegister(ctypes.LittleEndianStructure):
-        _fields_ = [('buf', ctypes.c_ubyte*256), *[(r, ctypes.c_uint32) for r in ('plen', 'freq', 'rps', 'xpow', 'rssi', 'snr', 'npreamble', 'diomask')]]
+        _fields_ = [('buf', ctypes.c_ubyte*256), ('xtime', ctypes.c_uint64), *[(r, ctypes.c_uint32) for r in ('plen', 'freq', 'rps', 'xpow', 'rssi', 'snr', 'npreamble', 'status')]]
 
     def init(self) -> None:
         self.reg = Radio.RadioRegister()
         self.sim.map_peripheral(self.pid, self.reg)
         self.medium:Medium = self.sim.context.get('medium', Medium())
+        self.rcvr = LoraMsgReceiver(self.sim.runtime, self.medium)
 
-    def txdone(self, fut:'asyncio.Future[Any]') -> None:
+    def txdone(self, msg:LoraMsg) -> None:
         print(f'txdone')
-        self.reg.diomask = 1
+        self.reg.status = Radio.S_TXDONE
+        self.reg.xtime = self.sim.runtime.clock.time2ticks(msg.xend)
+        self.sim.irqhandler.set(self.pid)
+
+    def rxdone(self, msg:Optional[LoraMsg]) -> None:
+        print(f'rxdone')
+        if msg:
+            self.reg.status = Radio.S_RXDONE
+            self.reg.xtime = self.sim.runtime.clock.time2ticks(msg.xend)
+            pass
+        else:
+            self.reg.status = Radio.S_RXTOUT
+            self.reg.xtime = self.sim.runtime.clock.ticks(update=True)
         self.sim.irqhandler.set(self.pid)
 
     def svc_reset(self) -> None:
         pass
 
     def svc_clearirq(self) -> None:
-        self.reg.diomask = 0
         self.sim.irqhandler.clear(self.pid)
 
     def svc_rx(self) -> None:
-        raise NotImplementedError
+        print('svc_rx')
+        t = self.sim.runtime.clock.ticks2time(self.reg.xtime)
+        self.rcvr.receive(self.reg.freq, self.reg.rps, rxtime=t, minsyms=self.reg.npreamble, callback=self.rxdone)
 
     def svc_tx(self) -> None:
-        now = asyncio.get_running_loop().time()
+        now = self.sim.runtime.clock.time()
         msg = LoraMsg(now, bytes(self.reg.buf[:self.reg.plen]), self.reg.freq, self.reg.rps,
                 xpow=self.reg.xpow, npreamble=self.reg.npreamble)
-        t = asyncio.ensure_future(msg.transmit(self.medium))
-        t.add_done_callback(self.txdone)
+        msg.transmit(self.sim.runtime, self.medium, self.txdone)
 
     svc_lookup = {
             0: svc_reset,

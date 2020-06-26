@@ -17,6 +17,7 @@ from intelhex import IntelHex
 from uuid import UUID
 
 from eventhub import EventHub
+from runtime import Clock, Runtime
 
 
 # -----------------------------------------------------------------------------
@@ -83,7 +84,7 @@ class IrqHandler:
 PreRunHook = Callable[[], None]
 Context = Dict[str, Any]
 
-class Simulation(IrqHandler):
+class Simulation():
     RAM_BASE    = 0x10000000
     FLASH_BASE  = 0x20000000
     EE_BASE     = 0x30000000
@@ -95,6 +96,8 @@ class Simulation(IrqHandler):
     SVC_IRQ         = 3
     SVC_PERIPH_BASE = 0x01000000
 
+    dummyirqhandler = IrqHandler()
+
     class ResetException(BaseException):
         pass
 
@@ -102,9 +105,10 @@ class Simulation(IrqHandler):
     def default_irq_handler() -> int:
         raise NotImplementedError
 
-    def __init__(self, *, context:Context={}) -> None:
+    def __init__(self, runtime:Runtime, *, context:Context={}) -> None:
         self.emu = uc.Uc(uc.UC_ARCH_ARM, uc.UC_MODE_THUMB)
 
+        self.runtime = runtime
         self.context = context
 
         #self.emu.hook_add(uc.UC_HOOK_CODE,
@@ -183,7 +187,8 @@ class Simulation(IrqHandler):
         (sp, ep) = struct.unpack('<II',
                 self.emu.mem_read(Simulation.FLASH_BASE, 8))
 
-        self.irqhandler:IrqHandler = self
+        self.irqhandler = Simulation.dummyirqhandler
+        self.runtime.setclock(None)
         self.peripherals.clear()
         self.prerunhooks.clear()
 

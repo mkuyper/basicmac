@@ -4,10 +4,12 @@
 # This file is subject to the terms and conditions defined in file 'LICENSE',
 # which is part of this source code package.
 
-from typing import Optional, Tuple
+from typing import Callable, Optional, Set, Tuple
 
 import asyncio
 import math
+
+from runtime import Job, Runtime
 
 class Rps:
     @staticmethod
@@ -58,14 +60,8 @@ class Rps:
     def isFSK(rps:int) -> bool:
         return (rps & 0x7) == 0
 
-class Medium:
-    EV_TX_PREAMBLE = 0
-    EV_TX_PAYLOAD  = 1
-    EV_TX_COMPLETE = 2
-    EV_TX_ABORT    = 3
-
-    def event(self, ev:int, msg:'LoraMsg') -> None:
-        pass
+TxDoneCb = Callable[['LoraMsg'], None]
+RxDoneCb = Callable[[Optional['LoraMsg']], None]
 
 class LoraMsg:
     def __init__(self, time:float, pdu:bytes, freq:int, rps:int, *,
@@ -142,19 +138,128 @@ class LoraMsg:
     def airtime(self) -> float:
         return sum(self.airtimes())
 
-    @staticmethod
-    async def wait_until(t:float) -> None:
-        tdiff = t - asyncio.get_running_loop().time()
-        if tdiff > 0:
-            await asyncio.sleep(tdiff)
+    def transmit(self, runtime:Runtime, proc:'LoraMsgProcessor', cb:Optional[TxDoneCb]=None) -> None:
+        self.xrt = runtime
+        self.xproc = proc
+        self.xcb = cb
+        self.xjob:Optional[Job] = self.xrt.schedule(self.xrt.clock.time2ticks(self.xbeg), self.tx_pre)
 
-    async def transmit(self, medium:Medium) -> None:
-        try:
-            await LoraMsg.wait_until(self.xbeg)
-            medium.event(Medium.EV_TX_PREAMBLE, self)
-            await LoraMsg.wait_until(self.xpld)
-            medium.event(Medium.EV_TX_PAYLOAD, self)
-            await LoraMsg.wait_until(self.xend)
-            medium.event(Medium.EV_TX_COMPLETE, self)
-        except asyncio.CancelledError:
-            medium.event(Medium.EV_TX_ABORT, self)
+    def tx_pre(self) -> None:
+        self.xproc.msg_preamble(self)
+        self.xjob = self.xrt.schedule(self.xrt.clock.time2ticks(self.xpld), self.tx_pld)
+
+    def tx_pld(self) -> None:
+        self.xproc.msg_payload(self)
+        self.xjob = self.xrt.schedule(self.xrt.clock.time2ticks(self.xend), self.tx_end)
+
+    def tx_end(self) -> None:
+        self.xproc.msg_complete(self)
+        self.xjob = None
+        if self.xcb:
+            self.xcb(self)
+
+class LoraMsgProcessor:
+    def msg_preamble(self, msg:LoraMsg, t:Optional[float]=None) -> None:
+        pass
+
+    def msg_payload(self, msg:LoraMsg) -> None:
+        pass
+
+    def msg_complete(self, msg:LoraMsg) -> None:
+        pass
+
+    def msg_abort(self, msg:LoraMsg) -> None:
+        pass
+
+class Medium(LoraMsgProcessor):
+    def add_listener(self, proc:LoraMsgProcessor, t:Optional[float]=None) -> None:
+        pass
+
+    def remove_listener(self, proc:LoraMsgProcessor) -> None:
+        pass
+
+class SimpleMedium(Medium):
+    def __init__(self) -> None:
+        self.pmsg:Set['LoraMsg'] = set()
+        self.listeners:Set['LoraMsgProcessor'] = set()
+
+    def add_listener(self, proc:LoraMsgProcessor, t:Optional[float]=None) -> None:
+        self.listeners.add(proc)
+        for msg in self.pmsg:
+            proc.msg_preamble(msg, t)
+
+    def remove_listener(self, proc:LoraMsgProcessor) -> None:
+        self.listeners.remove(proc)
+
+    def msg_preamble(self, msg:LoraMsg, t:Optional[float]=None) -> None:
+        print(f'pre: {msg.xbeg}')
+        self.pmsg.add(msg)
+        for l in self.listeners:
+            l.msg_preamble(msg)
+
+    def msg_payload(self, msg:LoraMsg) -> None:
+        print(f'pld: {msg.xpld}')
+        self.pmsg.discard(msg)
+        for l in self.listeners:
+            l.msg_payload(msg)
+
+    def msg_complete(self, msg:LoraMsg) -> None:
+        print(f'cmp: {msg.xend}')
+        for l in self.listeners:
+            l.msg_complete(msg)
+
+    def msg_abort(self, msg:LoraMsg) -> None:
+        self.pmsg.discard(msg)
+        for l in self.listeners:
+            l.msg_abort(msg)
+
+class LoraMsgReceiver(LoraMsgProcessor):
+    def __init__(self, runtime:Runtime, medium:Medium, symdetect:int=5) -> None:
+        self.rt = runtime
+        self.medium = medium
+        self.symdetect = symdetect
+
+    def receive(self, freq:int, rps:int, *,
+            rxtime:Optional[float]=None, minsyms:int=5, callback:Optional[RxDoneCb]=None) -> None:
+        self.freq = freq
+        self.rps = rps
+        self.minsyms = minsyms
+        self.callback = callback
+
+        if rxtime is None:
+            rxtime = self.rt.clock.time()
+
+        self.rxtime = rxtime
+        self.job1 = self.rt.schedule(rxtime, self.rxstart)
+        self.job2:Optional[Job] = None
+        self.msg:Optional[LoraMsg] = None
+
+    def rxstart(self) -> None:
+        print('rxstart')
+        self.medium.add_listener(self, self.rxtime)
+        self.job1 = self.rt.schedule(self.rxtime + LoraMsg.symtime(self.rps, nsym=self.minsyms), self.timeout)
+
+    def timeout(self) -> None:
+        print('timeout')
+        if self.job2:
+            self.job2.cancel()
+        self.medium.remove_listener(self)
+        if self.callback:
+            self.callback(None)
+
+    def msg_preamble(self, msg:LoraMsg, t:Optional[float]=None) -> None:
+        print(f't={t}')
+        if t is None:
+            t = msg.xbeg
+        print(f'l={t+LoraMsg.symtime(self.rps, nsym=self.symdetect)}')
+        if msg.freq == self.freq and msg.rps == self.rps and self.job2 is None:
+            self.job2 = self.rt.schedule(t + LoraMsg.symtime(self.rps, nsym=self.symdetect), self.msg_lock, msg=msg)
+
+    def msg_lock(self, msg:LoraMsg) -> None:
+        self.job1.cancel() # cancel timeout
+        print(f'locking onto: {msg}')
+
+    def msg_payload(self, msg:LoraMsg) -> None:
+        if msg == self.msg:
+            # and enough preamble overlap
+            pass
