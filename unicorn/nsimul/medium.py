@@ -9,7 +9,7 @@ from typing import Callable, Optional, Set, Tuple
 import asyncio
 import math
 
-from runtime import Job, Runtime
+from runtime import Job, Jobs, Runtime
 
 class Rps:
     @staticmethod
@@ -59,9 +59,6 @@ class Rps:
     @staticmethod
     def isFSK(rps:int) -> bool:
         return (rps & 0x7) == 0
-
-TxDoneCb = Callable[['LoraMsg'], None]
-RxDoneCb = Callable[[Optional['LoraMsg']], None]
 
 class LoraMsg:
     def __init__(self, time:float, pdu:bytes, freq:int, rps:int, *,
@@ -138,26 +135,6 @@ class LoraMsg:
     def airtime(self) -> float:
         return sum(self.airtimes())
 
-    def transmit(self, runtime:Runtime, proc:'LoraMsgProcessor', cb:Optional[TxDoneCb]=None) -> None:
-        self.xrt = runtime
-        self.xproc = proc
-        self.xcb = cb
-        self.xjob:Optional[Job] = self.xrt.schedule(self.xrt.clock.time2ticks(self.xbeg), self.tx_pre)
-
-    def tx_pre(self) -> None:
-        self.xproc.msg_preamble(self)
-        self.xjob = self.xrt.schedule(self.xrt.clock.time2ticks(self.xpld), self.tx_pld)
-
-    def tx_pld(self) -> None:
-        self.xproc.msg_payload(self)
-        self.xjob = self.xrt.schedule(self.xrt.clock.time2ticks(self.xend), self.tx_end)
-
-    def tx_end(self) -> None:
-        self.xproc.msg_complete(self)
-        self.xjob = None
-        if self.xcb:
-            self.xcb(self)
-
 class LoraMsgProcessor:
     def msg_preamble(self, msg:LoraMsg, t:Optional[float]=None) -> None:
         pass
@@ -213,53 +190,91 @@ class SimpleMedium(Medium):
         for l in self.listeners:
             l.msg_abort(msg)
 
-class LoraMsgReceiver(LoraMsgProcessor):
-    def __init__(self, runtime:Runtime, medium:Medium, symdetect:int=5) -> None:
-        self.rt = runtime
-        self.medium = medium
-        self.symdetect = symdetect
 
-    def receive(self, freq:int, rps:int, *,
-            rxtime:Optional[float]=None, minsyms:int=5, callback:Optional[RxDoneCb]=None) -> None:
+TxDoneCb = Callable[['LoraMsg'], None]
+RxDoneCb = Callable[[Optional['LoraMsg']], None]
+
+class LoraMsgTransmitter():
+    def __init__(self, runtime:Runtime, medium:Medium, *, cb:Optional[TxDoneCb]=None) -> None:
+        self.jobs = Jobs(runtime)
+        self.medium = medium
+        self.cb = cb
+        self.msg:Optional[LoraMsg] = None
+
+    def transmit(self, msg:LoraMsg) -> None:
+        assert self.msg is None
+        self.msg = msg
+        self.jobs.schedule(None, msg.xbeg, self.txstart)
+
+    def txstart(self) -> None:
+        assert self.msg is not None
+        self.medium.msg_preamble(self.msg)
+        self.jobs.schedule(None, self.msg.xpld, self.txpayload)
+
+    def txpayload(self) -> None:
+        assert self.msg is not None
+        self.medium.msg_payload(self.msg)
+        self.jobs.schedule(None, self.msg.xend, self.txdone)
+
+    def txdone(self) -> None:
+        assert self.msg is not None
+        self.medium.msg_complete(self.msg)
+        if self.cb:
+            self.cb(self.msg)
+        self.msg = None
+
+class LoraMsgReceiver(LoraMsgProcessor):
+    def __init__(self, runtime:Runtime, medium:Medium, *, cb:Optional[RxDoneCb]=None, symdetect:int=5) -> None:
+        self.jobs = Jobs(runtime)
+        self.medium = medium
+        self.cb = cb
+        self.symdetect = symdetect
+        self.msg:Optional[LoraMsg] = None
+        self.locked = False
+
+    def receive(self, rxtime:float, freq:int, rps:int, *, minsyms:int=5) -> None:
         self.freq = freq
         self.rps = rps
         self.minsyms = minsyms
-        self.callback = callback
-
-        if rxtime is None:
-            rxtime = self.rt.clock.time()
-
         self.rxtime = rxtime
-        self.job1 = self.rt.schedule(rxtime, self.rxstart)
-        self.job2:Optional[Job] = None
-        self.msg:Optional[LoraMsg] = None
+
+        self.msg = None
+        self.locked = False
+
+        self.jobs.schedule(None, rxtime, self.rxstart)
 
     def rxstart(self) -> None:
         print('rxstart')
         self.medium.add_listener(self, self.rxtime)
-        self.job1 = self.rt.schedule(self.rxtime + LoraMsg.symtime(self.rps, nsym=self.minsyms), self.timeout)
+        self.jobs.schedule('timeout', self.rxtime + LoraMsg.symtime(self.rps, nsym=self.minsyms), self.timeout)
 
     def timeout(self) -> None:
         print('timeout')
-        if self.job2:
-            self.job2.cancel()
         self.medium.remove_listener(self)
-        if self.callback:
-            self.callback(None)
+        self.jobs.cancel_all()
+        if self.cb:
+            self.cb(None)
 
     def msg_preamble(self, msg:LoraMsg, t:Optional[float]=None) -> None:
         print(f't={t}')
         if t is None:
             t = msg.xbeg
         print(f'l={t+LoraMsg.symtime(self.rps, nsym=self.symdetect)}')
-        if msg.freq == self.freq and msg.rps == self.rps and self.job2 is None:
-            self.job2 = self.rt.schedule(t + LoraMsg.symtime(self.rps, nsym=self.symdetect), self.msg_lock, msg=msg)
+        if msg.freq == self.freq and msg.rps == self.rps and self.msg is None:
+            self.msg = msg
+            self.jobs.schedule('lock', t + LoraMsg.symtime(self.rps, nsym=self.symdetect), self.msg_lock)
 
-    def msg_lock(self, msg:LoraMsg) -> None:
-        self.job1.cancel() # cancel timeout
-        print(f'locking onto: {msg}')
+    def msg_lock(self) -> None:
+        print('lock')
+        self.jobs.cancel('timeout')
+        self.locked = True
 
     def msg_payload(self, msg:LoraMsg) -> None:
-        if msg == self.msg:
-            # and enough preamble overlap
-            pass
+        if msg == self.msg and not self.locked:
+            self.jobs.cancel('lock')
+            self.msg = None
+
+    def msg_complete(self, msg:LoraMsg) -> None:
+        if msg == self.msg and self.locked:
+            if self.cb:
+                self.cb(self.msg)

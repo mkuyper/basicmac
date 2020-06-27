@@ -11,7 +11,7 @@ import ctypes
 from uuid import UUID
 
 from device import IrqHandler, Peripheral, Peripherals, Simulation
-from medium import LoraMsg, LoraMsgReceiver, Medium
+from medium import LoraMsg, LoraMsgReceiver, LoraMsgTransmitter, Medium
 from runtime import Clock, Job, Runtime
 
 
@@ -158,7 +158,8 @@ class Radio(Peripheral):
         self.reg = Radio.RadioRegister()
         self.sim.map_peripheral(self.pid, self.reg)
         self.medium:Medium = self.sim.context.get('medium', Medium())
-        self.rcvr = LoraMsgReceiver(self.sim.runtime, self.medium)
+        self.rcvr = LoraMsgReceiver(self.sim.runtime, self.medium, cb=self.rxdone)
+        self.xmtr = LoraMsgTransmitter(self.sim.runtime, self.medium, cb=self.txdone)
 
     def txdone(self, msg:LoraMsg) -> None:
         print(f'txdone')
@@ -171,6 +172,8 @@ class Radio(Peripheral):
         if msg:
             self.reg.status = Radio.S_RXDONE
             self.reg.xtime = self.sim.runtime.clock.time2ticks(msg.xend)
+            self.reg.buf[:len(msg.pdu)] = msg.pdu
+            self.reg.plen = len(msg.pdu)
             pass
         else:
             self.reg.status = Radio.S_RXTOUT
@@ -186,13 +189,13 @@ class Radio(Peripheral):
     def svc_rx(self) -> None:
         print('svc_rx')
         t = self.sim.runtime.clock.ticks2time(self.reg.xtime)
-        self.rcvr.receive(self.reg.freq, self.reg.rps, rxtime=t, minsyms=self.reg.npreamble, callback=self.rxdone)
+        self.rcvr.receive(t, self.reg.freq, self.reg.rps, minsyms=self.reg.npreamble)
 
     def svc_tx(self) -> None:
         now = self.sim.runtime.clock.time()
         msg = LoraMsg(now, bytes(self.reg.buf[:self.reg.plen]), self.reg.freq, self.reg.rps,
                 xpow=self.reg.xpow, npreamble=self.reg.npreamble)
-        msg.transmit(self.sim.runtime, self.medium, self.txdone)
+        self.xmtr.transmit(msg)
 
     svc_lookup = {
             0: svc_reset,

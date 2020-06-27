@@ -7,7 +7,7 @@
 
 import asyncio
 
-from medium import LoraMsg, LoraMsgProcessor, Medium
+from medium import LoraMsg, LoraMsgProcessor, LoraMsgTransmitter, Medium
 from runtime import Runtime
 
 class UniversalGateway(LoraMsgProcessor):
@@ -15,6 +15,7 @@ class UniversalGateway(LoraMsgProcessor):
         self.upframes:asyncio.Queue[LoraMsg] = asyncio.Queue()
         self.runtime = runtime
         self.medium = medium
+        self.xmtr = LoraMsgTransmitter(runtime, medium)
         medium.add_listener(self)
 
     def msg_complete(self, msg:LoraMsg) -> None:
@@ -24,4 +25,4 @@ class UniversalGateway(LoraMsgProcessor):
         return await self.upframes.get()
 
     def sched_dn(self, msg:LoraMsg) -> None:
-        msg.transmit(self.runtime, self.medium)
+        self.xmtr.transmit(msg)
