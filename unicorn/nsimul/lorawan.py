@@ -7,7 +7,7 @@
 
 import asyncio
 
-from medium import LoraMsg, LoraMsgProcessor, LoraMsgTransmitter, Medium
+from medium import LoraMsg, LoraMsgProcessor, LoraMsgTransmitter, Medium, Rps
 from runtime import Runtime
 
 class UniversalGateway(LoraMsgProcessor):
@@ -19,7 +19,8 @@ class UniversalGateway(LoraMsgProcessor):
         medium.add_listener(self)
 
     def msg_complete(self, msg:LoraMsg) -> None:
-        self.upframes.put_nowait(msg)
+        if not Rps.isIqInv(msg.rps):
+            self.upframes.put_nowait(msg)
 
     async def next_up(self) -> LoraMsg:
         return await self.upframes.get()

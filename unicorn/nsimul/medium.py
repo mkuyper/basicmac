@@ -12,10 +12,14 @@ import math
 from runtime import Job, Jobs, Runtime
 
 class Rps:
+    # Extensions that are not in LMiC's 16-bit RPS
+    IQINV = (1 << 16)
+
     @staticmethod
-    def makeRps(sf:int=7, bw:int=125000, cr:int=1, crc:int=1, ih:int=0) -> int:
+    def makeRps(sf:int=7, bw:int=125000, cr:int=1, crc:int=1, ih:int=0, *, iqinv:bool=False) -> int:
         return ((sf-6) | ([125000,250000,500000].index(bw)<<3)
-                | ((cr-1)<<5) | ((crc^1)<<7) | ((ih&0xFF)<<8)) if sf else 0
+                | ((cr-1)<<5) | ((crc^1)<<7) | ((ih&0xFF)<<8)
+                | (Rps.IQINV if iqinv else 0)) if sf else 0
 
     @staticmethod
     def getSf(rps:int) -> int:
@@ -59,6 +63,10 @@ class Rps:
     @staticmethod
     def isFSK(rps:int) -> bool:
         return (rps & 0x7) == 0
+
+    @staticmethod
+    def isIqInv(rps:int) -> bool:
+        return bool(rps & Rps.IQINV)
 
 class LoraMsg:
     def __init__(self, time:float, pdu:bytes, freq:int, rps:int, *,

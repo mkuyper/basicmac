@@ -144,6 +144,11 @@ enum {
     RADIO_S_RXTOUT,
 };
 
+// RPS extensions
+enum {
+    RADIO_ERPS_IQINV = (1 << 16),
+};
+
 static void radio_irq (void) {
     debug_printf("radio_irq()\r\n");
     psvc(HAL_PID_RADIO, RADIO_PSVC_CLEARIRQ);
@@ -224,7 +229,9 @@ void radio_startrx (bool rxcontinuous) {
     reg->rps = LMIC.rps;
     reg->npreamble = LMIC.rxsyms;
 
-    // TODO - IQ inversion
+    if( LMIC.noRXIQinversion == 0 ) {
+        reg->rps |= RADIO_ERPS_IQINV;
+    }
 
     psvc(HAL_PID_RADIO, RADIO_PSVC_RX);
 }

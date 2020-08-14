@@ -18,7 +18,7 @@ async def gwloop(gw:UniversalGateway) -> None:
     while True:
         msg = await gw.next_up()
         print(f'gw recv: {msg}')
-        nmsg = LoraMsg(msg.xend + 5, bytes.fromhex('0102030405060708'), freq=msg.freq, rps=msg.rps | 0x80)
+        nmsg = LoraMsg(msg.xend + 5, bytes.fromhex('0102030405060708'), freq=msg.freq, rps=msg.rps | 0x10080)
         gw.sched_dn(nmsg)
 
 async def main() -> None:
