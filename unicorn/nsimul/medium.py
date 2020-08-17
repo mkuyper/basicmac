@@ -177,19 +177,16 @@ class SimpleMedium(Medium):
         self.listeners.remove(proc)
 
     def msg_preamble(self, msg:LoraMsg, t:Optional[float]=None) -> None:
-        print(f'pre: {msg.xbeg}')
         self.pmsg.add(msg)
         for l in self.listeners:
             l.msg_preamble(msg)
 
     def msg_payload(self, msg:LoraMsg) -> None:
-        print(f'pld: {msg.xpld}')
         self.pmsg.discard(msg)
         for l in self.listeners:
             l.msg_payload(msg)
 
     def msg_complete(self, msg:LoraMsg) -> None:
-        print(f'cmp: {msg.xend}')
         for l in self.listeners:
             l.msg_complete(msg)
 
@@ -252,28 +249,23 @@ class LoraMsgReceiver(LoraMsgProcessor):
         self.jobs.schedule(None, rxtime, self.rxstart)
 
     def rxstart(self) -> None:
-        print('rxstart')
         self.medium.add_listener(self, self.rxtime)
         self.jobs.schedule('timeout', self.rxtime + LoraMsg.symtime(self.rps, nsym=self.minsyms), self.timeout)
 
     def timeout(self) -> None:
-        print('timeout')
         self.medium.remove_listener(self)
         self.jobs.cancel_all()
         if self.cb:
             self.cb(None)
 
     def msg_preamble(self, msg:LoraMsg, t:Optional[float]=None) -> None:
-        print(f't={t}')
         if t is None:
             t = msg.xbeg
-        print(f'l={t+LoraMsg.symtime(self.rps, nsym=self.symdetect)}')
         if msg.freq == self.freq and msg.rps == self.rps and self.msg is None:
             self.msg = msg
             self.jobs.schedule('lock', t + LoraMsg.symtime(self.rps, nsym=self.symdetect), self.msg_lock)
 
     def msg_lock(self) -> None:
-        print('lock')
         self.jobs.cancel('timeout')
         self.locked = True
 

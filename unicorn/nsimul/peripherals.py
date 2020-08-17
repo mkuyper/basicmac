@@ -162,13 +162,11 @@ class Radio(Peripheral):
         self.xmtr = LoraMsgTransmitter(self.sim.runtime, self.medium, cb=self.txdone)
 
     def txdone(self, msg:LoraMsg) -> None:
-        print(f'txdone')
         self.reg.status = Radio.S_TXDONE
         self.reg.xtime = self.sim.runtime.clock.time2ticks(msg.xend)
         self.sim.irqhandler.set(self.pid)
 
     def rxdone(self, msg:Optional[LoraMsg]) -> None:
-        print(f'rxdone')
         if msg:
             self.reg.status = Radio.S_RXDONE
             self.reg.xtime = self.sim.runtime.clock.time2ticks(msg.xend)
@@ -187,7 +185,6 @@ class Radio(Peripheral):
         self.sim.irqhandler.clear(self.pid)
 
     def svc_rx(self) -> None:
-        print('svc_rx')
         t = self.sim.runtime.clock.ticks2time(self.reg.xtime)
         self.rcvr.receive(t, self.reg.freq, self.reg.rps, minsyms=self.reg.npreamble)
 
