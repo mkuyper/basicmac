@@ -103,7 +103,7 @@ class Runtime():
             t = self.clock.ticks2time(self.jobs[0]._ticks)
             self.handle = asyncio.get_running_loop().call_at(t, self.step)
 
-class Jobs:
+class JobGroup:
     def __init__(self, runtime:Runtime) -> None:
         self.runtime = runtime
         self.job2name:Dict[Job,Optional[str]] = dict()

@@ -9,7 +9,7 @@ from typing import Callable, Optional, Set, Tuple
 import asyncio
 import math
 
-from runtime import Job, Jobs, Runtime
+from runtime import Job, JobGroup, Runtime
 
 class Rps:
     # Extensions that are not in LMiC's 16-bit RPS
@@ -204,7 +204,7 @@ RxDoneCb = Callable[[Optional['LoraMsg']], None]
 
 class LoraMsgTransmitter():
     def __init__(self, runtime:Runtime, medium:Medium, *, cb:Optional[TxDoneCb]=None) -> None:
-        self.jobs = Jobs(runtime)
+        self.jobs = JobGroup(runtime)
         self.medium = medium
         self.cb = cb
         self.msg:Optional[LoraMsg] = None
@@ -233,7 +233,7 @@ class LoraMsgTransmitter():
 
 class LoraMsgReceiver(LoraMsgProcessor):
     def __init__(self, runtime:Runtime, medium:Medium, *, cb:Optional[RxDoneCb]=None, symdetect:int=5) -> None:
-        self.jobs = Jobs(runtime)
+        self.jobs = JobGroup(runtime)
         self.medium = medium
         self.cb = cb
         self.symdetect = symdetect
