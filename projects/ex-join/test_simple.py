@@ -10,7 +10,7 @@ import sys
 
 from device import Simulation
 from eventhub import ColoramaStream, LoggingEventHub
-from lorawan import UniversalGateway
+from lorawan import LNS, UniversalGateway
 from medium import LoraMsg, SimpleMedium
 from runtime import Runtime
 from vtimeloop import VirtualTimeLoop
@@ -47,7 +47,9 @@ async def create_env() -> Generator[UniversalGateway,None,None]:
 
 @test("simple first test")
 async def _(gw=create_env):
-    msg = await gw.next_up()
-    print(f'gw recv: {msg}')
+    m = await gw.next_up()
+    print(f'gw recv: {m}')
+
+    LNS().join(m)
 
 asyncio.set_event_loop(VirtualTimeLoop())

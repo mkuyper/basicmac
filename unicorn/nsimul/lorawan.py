@@ -3,7 +3,7 @@
 # This file is subject to the terms and conditions defined in file 'LICENSE',
 # which is part of this source code package.
 
-from typing import Any, List, Tuple
+from typing import Any, Dict, List, MutableMapping, Tuple
 
 import asyncio
 import numpy
@@ -16,6 +16,8 @@ import rtlib as rt
 
 from medium import LoraMsg, LoraMsgProcessor, LoraMsgTransmitter, Medium, Rps
 from runtime import Runtime
+
+Session = MutableMapping[str,Any]
 
 class UniversalGateway(LoraMsgProcessor):
     def __init__(self, runtime:Runtime, medium:Medium, regions:List[ld.Region]=[ld.EU868,ld.US915]) -> None:
@@ -32,7 +34,7 @@ class UniversalGateway(LoraMsgProcessor):
         if not Rps.isIqInv(msg.rps):
             self.upframes.put_nowait(msg)
 
-    async def next_up(self) -> LoraMsg:
+    async def next_up(self) -> lm.Msg:
         return self.unpack(await self.upframes.get())
 
     def sched_dn(self, msg:LoraMsg) -> None:
@@ -54,9 +56,46 @@ class UniversalGateway(LoraMsgProcessor):
         return m
 
 
+class SessionManager:
+    def __init__(self) -> None:
+        self.addr2sess:Dict[int,Dict[int,Session]] = {}
+        self.eui2sess:Dict[int,Dict[int,Session]] = {}
+
+    def add(self, s:Session) -> None:
+        devaddr:int = s['devaddr']
+        deveui:int = s['deveui']
+        self.addr2sess.setdefault(devaddr, {})[deveui] = s
+        self.eui2sess.setdefault(deveui, {})[devaddr] = s
+
+    @staticmethod
+    def _remove(outer:Dict[int,Dict[int,Session]], k1:int, k2:int) -> None:
+        if (inner := outer.get(k1)) is not None:
+            if inner.pop(k2, None):
+                if not inner:
+                    outer.pop(k1)
+
+    def remove(self, s:Session) -> None:
+        devaddr:int = s['devaddr']
+        deveui:int = s['deveui']
+        SessionManager._remove(self.addr2sess, devaddr, deveui)
+        SessionManager._remove(self.eui2sess, deveui, devaddr)
+
+    @staticmethod
+    def _get(d:Dict[int,Dict[int,Session]], k:int) -> List[Session]:
+        return list(d.get(k, {}).values())
+
+    def get_by_addr(self, devaddr:int) -> List[Session]:
+        return SessionManager._get(self.addr2sess, devaddr)
+
+    def get_by_eui(self, deveui:int) -> List[Session]:
+        return SessionManager._get(self.eui2sess, deveui)
+
+    def all(self) -> List[Session]:
+        return list(v for d in self.addr2sess.values() for v in d.values())
+
 class LNS:
     def __init__(self) -> None:
-        pass
+        self.sm = SessionManager()
 
     def join(self, m:lm.Msg, **kwargs:Any) -> LoraMsg:
         assert m['msgtype'] == 'jreq'
@@ -72,6 +111,12 @@ class LNS:
                     lm.DLSettings.pack(0, m['region'].RX2DR, False)))
 
         lm.verify_jreq(nwkkey, msg.pdu)
+        print(m['DevEUI'])
+
+        maxnonce = max((s['DevNonce'] for s in self.sm.get_by_eui(m['DevEUI'])), default=-1)
+        devnonce = m['DevNonce']
+        if maxnonce >= devnonce:
+            raise ValueError('DevNonce is not strictly increasing')
 
 
 
