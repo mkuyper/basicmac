@@ -68,6 +68,15 @@ class Rps:
     def isIqInv(rps:int) -> bool:
         return bool(rps & Rps.IQINV)
 
+    @staticmethod
+    def getSfBw(rps:int) -> Tuple[int,int]:
+        return (Rps.getSf(rps), Rps.getBw(rps))
+
+    @staticmethod
+    def sfbwstr(rps:int) -> str:
+        sf, bw = Rps.getSfBw(rps)
+        return f'SF{sf}BW{bw//1000}' if sf else 'FSK'
+
 class LoraMsg:
     def __init__(self, time:float, pdu:bytes, freq:int, rps:int, *,
             xpow:Optional[int]=None, rssi:Optional[int]=None, snr:Optional[int]=None,
