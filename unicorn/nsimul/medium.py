@@ -70,7 +70,9 @@ class Rps:
 
     @staticmethod
     def getSfBw(rps:int) -> Tuple[int,int]:
-        return (Rps.getSf(rps), Rps.getBw(rps))
+        sf = Rps.getSf(rps)
+        bw = Rps.getBw(rps) if sf else 0
+        return sf, bw
 
     @staticmethod
     def sfbwstr(rps:int) -> str:
