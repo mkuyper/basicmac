@@ -26,12 +26,22 @@ async def createtest():
 async def _(dut=createtest):
     await dut.start_testmode()
 
-@test('2.2 Device Activation')
-async def _(dut=createtest):
-    await dut.start_testmode()
 
-@test('simple')
+@test('2.2 Test Application Functionality')
 async def _(dut=createtest):
-    assert 2<1
+    m = await dut.start_testmode()
+    dc = dut.unpack_dnctr(m)
+
+    await dut.echo(m, b'\x04\x01')
+
+    m = await dut.test_updf()
+    dut.unpack_dnctr(m, expected=dc+1)
+
+    dut.request_mode(m, False)
+
+    m = await dut.test_updf()
+    dut.unpack_dnctr(m, expected=dc+2)
+
+
 
 asyncio.set_event_loop(VirtualTimeLoop())

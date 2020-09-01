@@ -20,6 +20,14 @@ from lorawan import LNS, LoraWanMsg, UniversalGateway
 from medium import LoraMsg, SimpleMedium
 from runtime import Runtime
 
+def explain(s:Optional[str]='', *, explain:Optional[str]=None, **kwargs:Any) -> Optional[str]:
+    if s is None:
+        if explain is None:
+            return None
+        else:
+            s = ''
+    return s if explain is None else f'{s} ({explain})'
+
 class DeviceTest:
     def __init__(self, hexfiles:List[str]) -> None:
         self.runtime = Runtime()
@@ -40,10 +48,6 @@ class DeviceTest:
             await self.simtask
         except asyncio.CancelledError:
             pass
-
-    @staticmethod
-    def explain(s:str='', *, explain:Optional[str]=None, **kwargs:Any) -> str:
-        return s if explain is None else f'{s} ({explain})'
 
     async def up(self, *, timeout:Optional[float]=None, **kwargs:Any) -> LoraWanMsg:
         return await asyncio.wait_for(self.gateway.next_up(), timeout)
@@ -68,8 +72,7 @@ class DeviceTest:
     def verify(self, lwm:LoraWanMsg, *, expectport:Optional[int]=None, **kwargs:Any) -> rt.types.Msg:
         updf = LNS.unpack(self.session, lwm.msg.pdu)
         if expectport is not None:
-            expect.assert_equal(expectport, updf['FPort'], DeviceTest.explain('port mismatch', **kwargs))
-            #assert expectport == updf['FPort'], DeviceTest.explain('port mismatch', **kwargs)
+            expect.assert_equal(expectport, updf['FPort'], explain('port mismatch', **kwargs))
         return updf
 
     async def updf(self, *, timeout:Optional[float]=None,
@@ -83,7 +86,7 @@ class DeviceTest:
             upmsg.rtm = self.verify(upmsg, **kwargs)
             if filter(upmsg):
                 return upmsg
-        assert False, DeviceTest.explain(f'No matching message received within limit of {limit} messages', **kwargs)
+        assert False, explain(f'No matching message received within limit of {limit} messages', **kwargs)
 
     def dndf(self, uplwm:LoraWanMsg, port:Optional[int]=None, payload:Optional[bytes]=None, *,
             fctrl:int=0, fopts:Optional[bytes]=None, confirmed:bool=False, invalidmic:bool=False, fcntdn_adj:int=0, **kwargs:Any) -> None:

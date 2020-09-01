@@ -4,20 +4,67 @@
 # This file is subject to the terms and conditions defined in file 'LICENSE',
 # which is part of this source code package.
 
-from typing import Any
+from typing import Any, Optional
 
-from devtest import DeviceTest
+import struct
+
+from ward import expect
+
+from devtest import explain, DeviceTest
 from lorawan import LoraWanMsg
 
 class LWTest(DeviceTest):
-    def req_test(self, uplwm:LoraWanMsg, **kwargs:Any) -> None:
+    def request_test(self, uplwm:LoraWanMsg, **kwargs:Any) -> None:
         self.dndf(uplwm, port=224, payload=b'\1\1\1\1', **kwargs)
+
+    def request_echo(self, uplwm:LoraWanMsg, echo:bytes, **kwargs:Any) -> None:
+        self.dndf(uplwm, port=224, payload=b'\x04' + echo, **kwargs)
+
+    def request_mode(self, uplwm:LoraWanMsg, mode_conf:bool, **kwargs:Any) -> None:
+        self.dndf(uplwm, port=224, payload=b'\x02' if mode_conf else b'\x03', **kwargs)
+
+    @staticmethod
+    def unpack_dnctr(lwm:LoraWanMsg, *, expected:Optional[int]=None, **kwargs) -> int:
+        payload = lwm.rtm['FRMPayload'];
+        try:
+            (dnctr,) = struct.unpack('>H', payload)
+        except struct.error as e:
+            raise ValueError(f'invalid payload: {payload.hex()}') from e
+        if expected is not None:
+            expect.assert_equal(expected, dnctr, explain(None, **kwargs))
+        return dnctr
+
+    @staticmethod
+    def unpack_echo(lwm:LoraWanMsg, *, orig:Optional[bytes]=None, **kwargs) -> bytes:
+        payload = lwm.rtm['FRMPayload'];
+        expect.assert_equal(0x04, payload[0], explain(None, **kwargs))
+        echo = payload[1:]
+        if orig is not None:
+            expected = bytes((x + 1) & 0xff for x in orig)
+            expect.assert_equal(expected, echo, explain(None, **kwargs))
+        return echo
+
+    async def test_updf(self, **kwargs:Any) -> LoraWanMsg:
+        kwargs.setdefault('timeout', 60)
+        return await self.updf(port=224, **kwargs)
+
 
     # join network (with kwargs), start test mode, return first test upmsg
     async def start_testmode(self, **kwargs:Any) -> LoraWanMsg:
+        kwargs.setdefault('timeout', 60)
         await self.join(**kwargs)
 
         m = await self.updf()
-        self.req_test(m)
+        self.request_test(m)
 
-        return await self.updf(expectport=224)
+        return await self.test_updf(**kwargs)
+
+    async def echo(self, uplwm:LoraWanMsg, echo:bytes, **kwargs:Any) -> LoraWanMsg:
+        self.request_echo(uplwm, echo, **kwargs)
+
+        m = await self.updf()
+        self.unpack_echo(m, orig=echo, **kwargs)
+
+        return m
+
+
