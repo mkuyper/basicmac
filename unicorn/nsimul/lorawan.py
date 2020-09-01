@@ -3,13 +3,14 @@
 # This file is subject to the terms and conditions defined in file 'LICENSE',
 # which is part of this source code package.
 
-from typing import cast, Any, Dict, List, MutableMapping, Tuple
+from typing import cast, Any, Dict, List, MutableMapping, Optional, Tuple
 
 import asyncio
 import numpy
 import struct
 
 from binascii import crc32
+from dataclasses import dataclass
 
 import loracrypto as lc
 import loramsg as lm
@@ -20,6 +21,14 @@ from medium import LoraMsg, LoraMsgProcessor, LoraMsgTransmitter, Medium, Rps
 from runtime import Runtime
 
 Session = MutableMapping[str,Any]
+
+@dataclass
+class LoraWanMsg:
+    msg:LoraMsg
+    reg:ld.Region
+    ch:int
+    dr:int
+    rtm:Optional[rt.types.Msg]=None
 
 class UniversalGateway(LoraMsgProcessor):
     def __init__(self, runtime:Runtime, medium:Medium, regions:List[ld.Region]=[ld.EU868,ld.US915]) -> None:
@@ -36,26 +45,23 @@ class UniversalGateway(LoraMsgProcessor):
         if not Rps.isIqInv(msg.rps):
             self.upframes.put_nowait(msg)
 
-    async def next_up(self) -> rt.types.Msg:
-        return self.unpack(await self.upframes.get())
+    async def next_up(self) -> LoraWanMsg:
+        msg = await self.upframes.get()
+        reg, ch, dr = self.getupparams(msg)
+        return LoraWanMsg(msg, reg, ch, dr)
 
     def sched_dn(self, msg:LoraMsg) -> None:
         self.xmtr.transmit(msg)
 
-    def getupch(self, msg:LoraMsg) -> Tuple[ld.Region,int]:
+    def getupparams(self, msg:LoraMsg) -> Tuple[ld.Region,int,int]:
         for r in self.regions:
             dr = r.to_dr(*Rps.getSfBw(msg.rps)).dr
             for (idx, ch) in enumerate(r.upchannels):
                 if msg.freq == ch.freq and dr >= ch.minDR and dr <= ch.maxDR:
-                    return (r, idx)
+                    return (r, idx, dr)
         raise ValueError(f'Channel not defined in regions {", ".join(r.name for r in self.regions)}: '
                 f'{msg.freq/1e6:.6f}MHz/{Rps.sfbwstr(msg.rps)}')
 
-    def unpack(self, msg:LoraMsg) -> rt.types.Msg:
-        m = lm.unpack_nomic(msg.pdu)
-        m['region'], m['ch'] = self.getupch(msg)
-        m['upmsg'] = msg
-        return m
 
 class SessionManager:
     def __init__(self) -> None:
@@ -111,24 +117,20 @@ class LNS:
         return Rps.makeRps(sf=dndr.sf, bw=dndr.bw*1000, crc=0, iqinv=True)
 
     @staticmethod
-    def up2dn_rx1(session:Session, freq:int, rps:int) -> Tuple[int,int]:
+    def dn_rx1(session:Session, upfreq:int, uprps:int) -> Tuple[int,int]:
         region = session['region']
-        updr = LNS.rps2dr(region, rps)
-        return (region.get_dnfreq(freq),
-                LNS.dndr2rps(region, region.get_dndr(LNS.rps2dr(region, rps), session['rx1droff'])))
+        return (region.get_dnfreq(upfreq),
+                LNS.dndr2rps(region, region.get_dndr(LNS.rps2dr(region, uprps), session['rx1droff'])))
 
     @staticmethod
     def dn_rx2(session:Session) -> Tuple[int,int]:
         region = session['region']
         return (region.RX2Freq, LNS.dndr2rps(region, session['rx2dr']))
 
-    def join(self, m:rt.types.Msg, *, rx2:bool=False, **kwargs:Any) -> Tuple[LoraMsg,rt.Eui,int]:
-        assert m['msgtype'] == 'jreq'
-
-        msg = m['upmsg']
-
-        deveui = rt.Eui(m['DevEUI'])
-        region = m['region']
+    @staticmethod
+    def join(pdu:bytes, region:ld.Region, *, pdevnonce:int=-1, **kwargs:Any) -> Tuple[bytes,Session]:
+        jreq = lm.unpack_jreq(pdu)
+        deveui = rt.Eui(jreq['DevEUI'])
 
         nwkkey = kwargs.setdefault('nwkkey', b'@ABCDEFGHIJKLMNO')
         appnonce = kwargs.setdefault('appnonce', 0)
@@ -138,11 +140,10 @@ class LNS:
         (rx1droff, rx2dr, optneg) = lm.DLSettings.unpack(kwargs.setdefault('dlset',
                     lm.DLSettings.pack(0, region.RX2DR, False)))
 
-        lm.verify_jreq(nwkkey, msg.pdu)
+        lm.verify_jreq(nwkkey, pdu)
 
-        maxnonce = max((s['DevNonce'] for s in self.sm.get_by_eui(deveui)), default=-1)
-        devnonce = m['DevNonce']
-        if maxnonce >= devnonce:
+        devnonce = jreq['DevNonce']
+        if pdevnonce >= devnonce:
             raise ValueError('DevNonce is not strictly increasing')
 
         nwkskey = lc.crypto.derive(nwkkey, devnonce, appnonce, netid, lm.KD_NwkSKey)
@@ -150,7 +151,7 @@ class LNS:
 
         jacc = lm.pack_jacc(**kwargs)
 
-        session = {
+        return lm.pack_jacc(**kwargs), {
                 'deveui'    : deveui,
                 'devaddr'   : devaddr,
                 'nwkkey'    : nwkkey,
@@ -164,16 +165,15 @@ class LNS:
                 'devnonce'  : devnonce,
                 'region'    : region,
                 }
- 
-        rxdelay = ld.JaccRxDelay
-        if rx2:
-            rxdelay += 1
-            (freq, rps) = LNS.dn_rx2(session)
-        else:
-            (freq, rps) = LNS.up2dn_rx1(session, msg.freq, msg.rps)
 
-        self.sm.add(session)
-        return LoraMsg(msg.xend + rxdelay, jacc, freq, rps, xpow=region.max_eirp), deveui, devaddr
+        #rxdelay = ld.JaccRxDelay
+        #if rx2:
+        #    rxdelay += 1
+        #    (freq, rps) = LNS.dn_rx2(session)
+        #else:
+        #    (freq, rps) = LNS.dn_rx1(session, msg.freq, msg.rps)
+
+        #return LoraMsg(msg.xend + rxdelay, jacc, freq, rps, xpow=region.max_eirp), session
 
     def try_unpack(self, pdu:bytes, devaddr:int) -> Tuple[Session,rt.types.Msg]:
         for s in self.sm.get_by_addr(devaddr):
@@ -183,9 +183,28 @@ class LNS:
                 pass
         raise lm.VerifyError(f'no matching session found for devaddr {devaddr}')
 
-    def verify(self, m:rt.types.Msg) -> Session:
-        assert m['msgtype'] == 'updf'
-        session, updf = self.try_unpack(m['upmsg'].pdu, m['DevAddr'])
-        session['fcntup'] = m['FCnt']
-        m.update(updf)
-        return session
+    @staticmethod
+    def unpack(session:Session, pdu:bytes) -> rt.types.Msg:
+        updf = lm.unpack_dataframe(pdu, session['fcntup'], session['nwkskey'], session['appskey'])
+        assert session['devaddr'] == updf['DevAddr']
+        session['fcntup'] = updf['FCnt']
+        return updf
+
+    @staticmethod
+    def dl(session:Session, port:Optional[int]=None, payload:Optional[bytes]=None, *,
+            fctrl:int=0, fopts:Optional[bytes]=None, confirmed:bool=False, invalidmic:bool=False, fcntdn_adj:int=0, **kwargs:Any) -> bytes:
+        pdu = lm.pack_dataframe(
+                mhdr=(lm.FrmType.DCDN if confirmed else lm.FrmType.DADN) | lm.Major.V1,
+                devaddr=session['devaddr'],
+                fcnt=session['fcntdn'] + fcntdn_adj,
+                fctrl=fctrl,
+                fopts=fopts,
+                port=port,
+                payload=payload,
+                nwkskey=session['nwkskey'],
+                appskey=session['appskey'])
+        if invalidmic:
+            pdu = pdu[:-4] + bytes(map(lambda x: ~x & 0xff, pdu[-4:]))
+        if fcntdn_adj >= 0:
+            session['fcntdn'] += (1 + fcntdn_adj)
+        return pdu

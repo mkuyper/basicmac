@@ -40,6 +40,7 @@ class VirtualTimeLoop(asyncio.AbstractEventLoop):
                 if self._ex is not None:
                     raise self._ex
         finally:
+            self._ex = None
             asyncio.events._set_running_loop(None)
 
     def run_until_complete(self, future:Union[Generator[Any,None,T],Awaitable[T]]) -> T:
@@ -48,14 +49,7 @@ class VirtualTimeLoop(asyncio.AbstractEventLoop):
         return f.result()
 
     def create_task(self, coro): # type: ignore
-        async def wrap_for_ex() -> Any:
-            try:
-                return await coro
-            except asyncio.CancelledError:
-                pass
-            except BaseException as e:
-                self._ex = e
-        return asyncio.Task(wrap_for_ex(), loop=self)
+        return asyncio.Task(coro, loop=self)
 
     def create_future(self) -> 'asyncio.Future[Any]':
         return asyncio.Future(loop=self)

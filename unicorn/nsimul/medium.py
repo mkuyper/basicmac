@@ -81,7 +81,7 @@ class Rps:
 
 class LoraMsg:
     def __init__(self, time:float, pdu:bytes, freq:int, rps:int, *,
-            xpow:Optional[int]=None, rssi:Optional[int]=None, snr:Optional[int]=None,
+            xpow:Optional[float]=None, rssi:Optional[float]=None, snr:Optional[float]=None,
             dro:Optional[int]=None, npreamble:int=8) -> None:
 
         assert len(pdu) >= 0 and len(pdu) <= 255

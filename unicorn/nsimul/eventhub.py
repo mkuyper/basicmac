@@ -22,7 +22,10 @@ class LogWriter:
         self.buf = buf
 
     def write(self, s:str, **kwargs:Any) -> None:
-        self.buf.write(s)
+        try:
+            self.buf.write(s)
+        except ValueError:
+            pass
 
 class ColoramaStream(LogWriter):
     def write(self, s:str, style:str='', **kwargs:Any) -> None:
