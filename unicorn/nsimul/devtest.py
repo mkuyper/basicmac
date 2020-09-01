@@ -17,7 +17,7 @@ import loramsg as lm
 from device import Simulation
 from eventhub import ColoramaStream, LoggingEventHub
 from lorawan import LNS, LoraWanMsg, UniversalGateway
-from medium import LoraMsg, SimpleMedium
+from medium import LoraMsg, LoraMsgProcessor, SimpleMedium
 from runtime import Runtime
 
 def explain(s:Optional[str]='', *, explain:Optional[str]=None, **kwargs:Any) -> Optional[str]:
@@ -28,12 +28,18 @@ def explain(s:Optional[str]='', *, explain:Optional[str]=None, **kwargs:Any) -> 
             s = ''
     return s if explain is None else f'{s} ({explain})'
 
+class MediumLogger(LoraMsgProcessor):
+    def msg_preamble(self, msg:LoraMsg, t:Optional[float]=None) -> None:
+        print(msg)
+
 class DeviceTest:
     def __init__(self, hexfiles:List[str]) -> None:
         self.runtime = Runtime()
         self.log = LoggingEventHub(ColoramaStream(sys.stdout))
         self.medium = SimpleMedium()
         self.gateway = UniversalGateway(self.runtime, self.medium)
+
+        self.medium.add_listener(MediumLogger()) # XXX
 
         self.sim = Simulation(self.runtime, context={ 'evhub': self.log, 'medium': self.medium})
         for hf in hexfiles:
@@ -52,25 +58,34 @@ class DeviceTest:
     async def up(self, *, timeout:Optional[float]=None, **kwargs:Any) -> LoraWanMsg:
         return await asyncio.wait_for(self.gateway.next_up(), timeout)
 
-    def dn(self, uplwm:LoraWanMsg, pdu:bytes, *, rx2:bool=False, rx1delay:int=0, xpow:Optional[float]=None, **kwargs:Any) -> None:
+    def dn(self, uplwm:LoraWanMsg, pdu:bytes, *, rx2:bool=False, rx1delay:int=0, xpow:Optional[float]=None, join:bool=False, **kwargs:Any) -> None:
         rxdelay = rx1delay or self.session['rx1delay']
         if rx2:
             rxdelay += 1
-            (freq, rps) = LNS.dn_rx2(self.session)
+            (freq, rps) = LNS.dn_rx2(self.session, join)
         else:
-            (freq, rps) = LNS.dn_rx1(self.session, uplwm.msg.freq, uplwm.msg.rps)
+            (freq, rps) = LNS.dn_rx1(self.session, uplwm.msg.freq, uplwm.msg.rps, join)
         if xpow is None:
             xpow = uplwm.reg.max_eirp
         self.gateway.sched_dn(LoraMsg(uplwm.msg.xend + rxdelay, pdu, freq, rps, xpow=xpow))
 
-    async def join(self, *, timeout:Optional[float]=None, **kwargs:Any) -> None:
+    async def join(self, *, timeout:Optional[float]=None, region:Optional[ld.Region]=None, **kwargs:Any) -> None:
         jreq = await self.up(timeout=timeout, **kwargs)
-        jacc, self.session = LNS.join(jreq.msg.pdu, jreq.reg, **kwargs)
+        if region:
+            if not isinstance(region, type(jreq.reg)):
+                raise ValueError(explain(f'Incompatible regions {region} and {jreq.reg}', **kwargs))
+        else:
+            region = jreq.reg
+
+        jacc, self.session = LNS.join(jreq.msg.pdu, region, **kwargs)
         kwargs.setdefault('rx1delay', ld.JaccRxDelay)
-        self.dn(jreq, jacc, **kwargs)
+        self.dn(jreq, jacc, join=True, **kwargs)
 
     def verify(self, lwm:LoraWanMsg, *, expectport:Optional[int]=None, **kwargs:Any) -> rt.types.Msg:
-        updf = LNS.unpack(self.session, lwm.msg.pdu)
+        try:
+            updf = LNS.unpack(self.session, lwm.msg.pdu)
+        except (ValueError, lm.VerifyError) as e:
+            raise ValueError(explain('Verification failed', **kwargs)) from e
         if expectport is not None:
             expect.assert_equal(expectport, updf['FPort'], explain('port mismatch', **kwargs))
         return updf

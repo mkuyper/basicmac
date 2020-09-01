@@ -38,3 +38,6 @@ class LoggingEventHub(EventHub):
     def event(self, type:int, **kwargs:Any) -> None:
         if type == EventHub.LOG:
             self.writer.write(cast(str, kwargs['msg']), style=Fore.BLUE)
+        if type == EventHub.LORA:
+            print(kwargs)
+            self.writer.write(cast(str, kwargs['msg']), style=Fore.GREEN)

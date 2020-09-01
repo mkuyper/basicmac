@@ -4,7 +4,7 @@
 # This file is subject to the terms and conditions defined in file 'LICENSE',
 # which is part of this source code package.
 
-from typing import cast, Any, Optional, Tuple
+from typing import cast, Any, Dict, Optional, Tuple
 
 import struct
 
@@ -22,6 +22,9 @@ class LWTest(DeviceTest):
 
     def request_mode(self, uplwm:LoraWanMsg, mode_conf:bool, **kwargs:Any) -> None:
         self.dndf(uplwm, port=224, payload=b'\x02' if mode_conf else b'\x03', **kwargs)
+
+    def request_rejoin(self, uplwm:LoraWanMsg, **kwargs:Any) -> None:
+        self.dndf(uplwm, port=224, payload=b'\x06', **kwargs)
 
     @staticmethod
     def unpack_dnctr(lwm:LoraWanMsg, *, expected:Optional[int]=None, **kwargs:Any) -> int:
@@ -51,12 +54,12 @@ class LWTest(DeviceTest):
         return await self.updf(port=224, **kwargs)
 
 
-    # join network (with kwargs), start test mode, return first test upmsg
+    # join network, start test mode, return first test upmsg
     async def start_testmode(self, **kwargs:Any) -> LoraWanMsg:
         kwargs.setdefault('timeout', 60)
         await self.join(**kwargs)
 
-        m = await self.updf()
+        m = await self.updf(**kwargs)
         self.request_test(m)
 
         return await self.test_updf(**kwargs)
@@ -69,4 +72,11 @@ class LWTest(DeviceTest):
 
         return m
 
-
+    async def upstats(self, count:int, *,
+            fstats:Optional[Dict[int,int]]=None) -> LoraWanMsg:
+        for _ in range(count):
+            m = await self.test_updf()
+            if fstats is not None:
+                f = m.msg.freq
+                fstats[f] = fstats.get(f, 0) + 1
+        return m

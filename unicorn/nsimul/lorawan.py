@@ -117,30 +117,35 @@ class LNS:
         return Rps.makeRps(sf=dndr.sf, bw=dndr.bw*1000, crc=0, iqinv=True)
 
     @staticmethod
-    def dn_rx1(session:Session, upfreq:int, uprps:int) -> Tuple[int,int]:
+    def dn_rx1(session:Session, upfreq:int, uprps:int, join:bool=False) -> Tuple[int,int]:
         region = session['region']
+        rx1droff = 0 if join else session['rx1droff']
         return (region.get_dnfreq(upfreq),
-                LNS.dndr2rps(region, region.get_dndr(LNS.rps2dr(region, uprps), session['rx1droff'])))
+                LNS.dndr2rps(region, region.get_dndr(LNS.rps2dr(region, uprps), rx1droff)))
 
     @staticmethod
-    def dn_rx2(session:Session) -> Tuple[int,int]:
+    def dn_rx2(session:Session, join:bool=False) -> Tuple[int,int]:
         region = session['region']
-        return (region.RX2Freq, LNS.dndr2rps(region, session['rx2dr']))
+        rx2dr = region.RX2DR if join else session['rx2dr']
+        return (region.RX2Freq, LNS.dndr2rps(region, rx2dr))
 
     @staticmethod
-    def join(pdu:bytes, region:ld.Region, *, pdevnonce:int=-1, **kwargs:Any) -> Tuple[bytes,Session]:
+    def join(pdu:bytes, region:ld.Region, *, pdevnonce:int=-1, nwkkey:bytes=b'@ABCDEFGHIJKLMNO',
+            appnonce:int=0, netid:int=1, devaddr:Optional[int]=None, dlset:Optional[int]=None, rxdly:int=0,
+            **kwargs:Any) -> Tuple[bytes,Session]:
         jreq = lm.unpack_jreq(pdu)
         deveui = rt.Eui(jreq['DevEUI'])
 
-        nwkkey = kwargs.setdefault('nwkkey', b'@ABCDEFGHIJKLMNO')
-        appnonce = kwargs.setdefault('appnonce', 0)
-        netid = kwargs.setdefault('netid', 1)
-        devaddr = kwargs.setdefault('devaddr', numpy.int32(crc32(struct.pack('q', deveui))))
-        rxdly = kwargs.setdefault('rxdly', 0)
-        (rx1droff, rx2dr, optneg) = lm.DLSettings.unpack(kwargs.setdefault('dlset',
-                    lm.DLSettings.pack(0, region.RX2DR, False)))
+        if devaddr is None:
+            devaddr = numpy.int32(crc32(struct.pack('q', deveui)))
+        if dlset is None:
+            dlset = lm.DLSettings.pack(0, region.RX2DR, False)
+
+        rx1droff, rx2dr, optneg = lm.DLSettings.unpack(dlset)
 
         lm.verify_jreq(nwkkey, pdu)
+
+        cflist = region.get_cflist()
 
         devnonce = jreq['DevNonce']
         if pdevnonce >= devnonce:
@@ -149,9 +154,7 @@ class LNS:
         nwkskey = lc.crypto.derive(nwkkey, devnonce, appnonce, netid, lm.KD_NwkSKey)
         appskey = lc.crypto.derive(nwkkey, devnonce, appnonce, netid, lm.KD_AppSKey)
 
-        jacc = lm.pack_jacc(**kwargs)
-
-        return lm.pack_jacc(**kwargs), {
+        return lm.pack_jacc(nwkkey, appnonce, netid, devaddr, dlset, rxdly, cflist, devnonce=devnonce), {
                 'deveui'    : deveui,
                 'devaddr'   : devaddr,
                 'nwkkey'    : nwkkey,
@@ -165,15 +168,6 @@ class LNS:
                 'devnonce'  : devnonce,
                 'region'    : region,
                 }
-
-        #rxdelay = ld.JaccRxDelay
-        #if rx2:
-        #    rxdelay += 1
-        #    (freq, rps) = LNS.dn_rx2(session)
-        #else:
-        #    (freq, rps) = LNS.dn_rx1(session, msg.freq, msg.rps)
-
-        #return LoraMsg(msg.xend + rxdelay, jacc, freq, rps, xpow=region.max_eirp), session
 
     def try_unpack(self, pdu:bytes, devaddr:int) -> Tuple[Session,rt.types.Msg]:
         for s in self.sm.get_by_addr(devaddr):
