@@ -4,7 +4,7 @@
 # This file is subject to the terms and conditions defined in file 'LICENSE',
 # which is part of this source code package.
 
-from typing import Any, Optional
+from typing import cast, Any, Optional, Tuple
 
 import struct
 
@@ -24,10 +24,11 @@ class LWTest(DeviceTest):
         self.dndf(uplwm, port=224, payload=b'\x02' if mode_conf else b'\x03', **kwargs)
 
     @staticmethod
-    def unpack_dnctr(lwm:LoraWanMsg, *, expected:Optional[int]=None, **kwargs) -> int:
+    def unpack_dnctr(lwm:LoraWanMsg, *, expected:Optional[int]=None, **kwargs:Any) -> int:
+        assert lwm.rtm is not None
         payload = lwm.rtm['FRMPayload'];
         try:
-            (dnctr,) = struct.unpack('>H', payload)
+            dnctr, = cast(Tuple[int], struct.unpack('>H', payload))
         except struct.error as e:
             raise ValueError(f'invalid payload: {payload.hex()}') from e
         if expected is not None:
@@ -35,8 +36,9 @@ class LWTest(DeviceTest):
         return dnctr
 
     @staticmethod
-    def unpack_echo(lwm:LoraWanMsg, *, orig:Optional[bytes]=None, **kwargs) -> bytes:
-        payload = lwm.rtm['FRMPayload'];
+    def unpack_echo(lwm:LoraWanMsg, *, orig:Optional[bytes]=None, **kwargs:Any) -> bytes:
+        assert lwm.rtm is not None
+        payload:bytes = lwm.rtm['FRMPayload'];
         expect.assert_equal(0x04, payload[0], explain(None, **kwargs))
         echo = payload[1:]
         if orig is not None:
