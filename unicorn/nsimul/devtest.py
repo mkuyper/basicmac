@@ -13,6 +13,7 @@ from ward import expect
 import rtlib as rt
 import loradefs as ld
 import loramsg as lm
+import loraopts as lo
 
 from device import Simulation
 from eventhub import ColoramaStream, LoggingEventHub
@@ -58,16 +59,20 @@ class DeviceTest:
     async def up(self, *, timeout:Optional[float]=None, **kwargs:Any) -> LoraWanMsg:
         return await asyncio.wait_for(self.gateway.next_up(), timeout)
 
-    def dn(self, uplwm:LoraWanMsg, pdu:bytes, *, rx2:bool=False, rx1delay:int=0, xpow:Optional[float]=None, join:bool=False, **kwargs:Any) -> None:
+    def dn(self, uplwm:LoraWanMsg, pdu:bytes, *, rx2:bool=False, rx1delay:int=0, xpow:Optional[float]=None,
+            toff:float=0, freq:Optional[int]=None,
+            join:bool=False, **kwargs:Any) -> None:
         rxdelay = rx1delay or self.session['rx1delay']
         if rx2:
             rxdelay += 1
-            (freq, rps) = LNS.dn_rx2(self.session, join)
+            (f, rps) = LNS.dn_rx2(self.session, join)
         else:
-            (freq, rps) = LNS.dn_rx1(self.session, uplwm.msg.freq, uplwm.msg.rps, join)
+            (f, rps) = LNS.dn_rx1(self.session, uplwm.msg.freq, uplwm.msg.rps, join)
         if xpow is None:
             xpow = uplwm.reg.max_eirp
-        self.gateway.sched_dn(LoraMsg(uplwm.msg.xend + rxdelay, pdu, freq, rps, xpow=xpow))
+        if freq is None:
+            freq = f
+        self.gateway.sched_dn(LoraMsg(uplwm.msg.xend + rxdelay + toff, pdu, freq, rps, xpow=xpow))
 
     async def join(self, *, timeout:Optional[float]=None, region:Optional[ld.Region]=None, **kwargs:Any) -> None:
         jreq = await self.up(timeout=timeout, **kwargs)
@@ -120,3 +125,14 @@ class DeviceTest:
         if fcntdn_adj >= 0:
             self.session['fcntdn'] += (1 + fcntdn_adj)
         self.dn(uplwm, pdu, **kwargs)
+
+    @staticmethod
+    def unpack_opts(msg:LoraMsg) -> List[lo.Opt]:
+        m = msg.rtm
+        assert msg.rtm is not None
+        if m['FPort'] is 0:
+            opts = m['FRMPayload']
+            assert len(m['FOpts']) == 0
+        else:
+            opts = m['FOpts']
+        return lo.unpack_optsup(opts)

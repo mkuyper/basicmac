@@ -4,14 +4,17 @@
 # This file is subject to the terms and conditions defined in file 'LICENSE',
 # which is part of this source code package.
 
-from typing import cast, Any, Dict, Optional, Tuple
+from typing import cast, Any, Dict, Optional, Set, Tuple
 
 import struct
 
-from ward import expect
+import loramsg as lm
+import loraopts as lo
 
 from devtest import explain, DeviceTest
 from lorawan import LoraWanMsg
+
+from ward import expect
 
 class LWTest(DeviceTest):
     def request_test(self, uplwm:LoraWanMsg, **kwargs:Any) -> None:
@@ -35,18 +38,18 @@ class LWTest(DeviceTest):
         except struct.error as e:
             raise ValueError(f'invalid payload: {payload.hex()}') from e
         if expected is not None:
-            expect.assert_equal(expected, dnctr, explain(None, **kwargs))
+            expect.assert_equal(expected, dnctr, explain('Unexpected downlink counter', **kwargs))
         return dnctr
 
     @staticmethod
     def unpack_echo(lwm:LoraWanMsg, *, orig:Optional[bytes]=None, **kwargs:Any) -> bytes:
         assert lwm.rtm is not None
         payload:bytes = lwm.rtm['FRMPayload'];
-        expect.assert_equal(0x04, payload[0], explain(None, **kwargs))
+        expect.assert_equal(0x04, payload[0], explain('Invalid echo packet', **kwargs))
         echo = payload[1:]
         if orig is not None:
             expected = bytes((x + 1) & 0xff for x in orig)
-            expect.assert_equal(expected, echo, explain(None, **kwargs))
+            expect.assert_equal(expected, echo, explain('Unexpected echo response', **kwargs))
         return echo
 
     async def test_updf(self, **kwargs:Any) -> LoraWanMsg:
@@ -79,4 +82,22 @@ class LWTest(DeviceTest):
             if fstats is not None:
                 f = m.msg.freq
                 fstats[f] = fstats.get(f, 0) + 1
+        return m
+
+    # check a NewChannelAns
+    @staticmethod
+    def check_ncr_o(o:lo.Opt, ChnlAck:Optional[int]=1, DRAck:Optional[int]=1, **kwargs:Any) -> None:
+        expect.assert_equal(lo.NewChannelAns, type(o), explain('Unexpected MAC command', **kwargs))
+        if ChnlAck is not None:
+            expect.assert_equal(o.ChnlAck.value, ChnlAck, explain('Unexpected ChnlAck value', **kwargs))
+        if DRAck is not None:
+            expect.assert_equal(o.DRAck.value, DRAck, explain('Unexpected DRAck value', **kwargs))
+
+    # check frequency usage
+    async def check_freqs(self, m:lm.Msg, freqs:Set[int], count:Optional[int]=None, **kwargs:Any) -> lm.Msg:
+        if count is None:
+            count = 16 * len(freqs)
+        fstats = {}
+        m = await self.upstats(count, fstats=fstats)
+        expect.assert_equal(fstats.keys(), freqs, explain('Unexpected channel usage', **kwargs))
         return m
