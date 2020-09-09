@@ -4,7 +4,7 @@
 # This file is subject to the terms and conditions defined in file 'LICENSE',
 # which is part of this source code package.
 
-from typing import cast, Any, Dict, Generator, Optional, Set, Tuple
+from typing import cast, Any, Dict, Generator, List, Optional, Set, Tuple
 
 import contextlib
 import struct
@@ -89,16 +89,17 @@ class LWTest(DeviceTest):
     @staticmethod
     def check_ncr_o(o:lo.Opt, ChnlAck:Optional[int]=1, DRAck:Optional[int]=1, **kwargs:Any) -> None:
         expect.assert_equal(lo.NewChannelAns, type(o), explain('Unexpected MAC command', **kwargs))
+        o = cast(lo.NewChannelAns, o)
         if ChnlAck is not None:
-            expect.assert_equal(o.ChnlAck.value, ChnlAck, explain('Unexpected ChnlAck value', **kwargs))
+            expect.assert_equal(o.ChnlAck.value, ChnlAck, explain('Unexpected ChnlAck value', **kwargs)) # type: ignore
         if DRAck is not None:
-            expect.assert_equal(o.DRAck.value, DRAck, explain('Unexpected DRAck value', **kwargs))
+            expect.assert_equal(o.DRAck.value, DRAck, explain('Unexpected DRAck value', **kwargs)) # type: ignore
 
     # check frequency usage
-    async def check_freqs(self, m:lm.Msg, freqs:Set[int], count:Optional[int]=None, **kwargs:Any) -> lm.Msg:
+    async def check_freqs(self, m:LoraWanMsg, freqs:Set[int], count:Optional[int]=None, **kwargs:Any) -> LoraWanMsg:
         if count is None:
             count = 16 * len(freqs)
-        fstats = {}
+        fstats:Dict[int,int] = {}
         m = await self.upstats(count, fstats=fstats)
         expect.assert_equal(fstats.keys(), freqs, explain('Unexpected channel usage', **kwargs))
         return m
