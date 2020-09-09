@@ -399,4 +399,39 @@ async def _(dut=createtest):
     assert len(m.unpack_opts()) ==  0
     m = await dut.echo(m, b'\1\2\3', rx2=True)
 
+
+@test('2.14 RXTimingSetupReq Command')
+async def _(dut=createtest):
+    m = await dut.start_testmode()
+
+    def check_rtsa(m:LoraWanMsg, msg:str) -> None:
+        opts = m.unpack_opts()
+        assert len(opts) == 1, msg
+        opt, = opts
+        assert type(opt) == lo.RXTimingSetupAns, msg
+
+    # -- Modify RX1 and RX2 timing to X second delay
+    for delay in range(1, 16):
+        dut.dndf(m, 0, lo.pack_opts([lo.RXTimingSetupReq(Delay=delay)]))
+        dut.session['rx1delay'] = delay
+        m = await dut.updf()
+        check_rtsa(m, f'rxdelay={delay}')
+        m = await dut.echo(m, b'\1\2\3')
+        assert len(m.unpack_opts()) == 0, f'rxdelay={delay}'
+        m = await dut.echo(m, b'\4\5\6', rx2=True)
+
+    # -- Restore default timing
+    dut.dndf(m, 0, lo.pack_opts([lo.RXTimingSetupReq(Delay=0)]))
+    dut.session['rx1delay'] = 1
+
+    # -- Test reply transmission
+    for i in range(2):
+        m = await dut.updf()
+        check_rtsa(m, f'iteration {i+1}')
+
+    m = await dut.echo(m, b'\1\2\3')
+    assert len(m.unpack_opts()) == 0
+    m = await dut.echo(m, b'\4\5\6', rx2=True)
+
+
 asyncio.set_event_loop(VirtualTimeLoop())
