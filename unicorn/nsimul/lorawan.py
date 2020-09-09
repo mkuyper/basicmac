@@ -15,6 +15,7 @@ from dataclasses import dataclass
 import loracrypto as lc
 import loramsg as lm
 import loradefs as ld
+import loraopts as lo
 import rtlib as rt
 
 from medium import LoraMsg, LoraMsgProcessor, LoraMsgTransmitter, Medium, Rps
@@ -29,6 +30,26 @@ class LoraWanMsg:
     ch:int
     dr:int
     rtm:Optional[rt.types.Msg]=None
+
+    def isconfirmed(self) -> bool:
+        m = self.rtm
+        assert m is not None
+        return (m['MHdr'] & lm.MHdr.FTYPE) in [lm.FrmType.DCUP, lm.FrmType.DCDN]
+
+    def isack(self) -> bool:
+        m = self.rtm
+        assert m is not None
+        return (int(m['FCtrl']) & lm.FCtrl.ACK) != 0
+
+    def unpack_opts(self) -> List[lo.Opt]:
+        m = self.rtm
+        assert m is not None
+        if m['FPort'] == 0:
+            opts = m['FRMPayload']
+            assert len(m['FOpts']) == 0
+        else:
+            opts = m['FOpts']
+        return lo.unpack_optsup(opts)
 
 class UniversalGateway(LoraMsgProcessor):
     def __init__(self, runtime:Runtime, medium:Medium, regions:List[ld.Region]=[ld.EU868,ld.US915]) -> None:
@@ -127,7 +148,8 @@ class LNS:
     def dn_rx2(session:Session, join:bool=False) -> Tuple[int,int]:
         region = session['region']
         rx2dr = region.RX2DR if join else session['rx2dr']
-        return (region.RX2Freq, LNS.dndr2rps(region, rx2dr))
+        rx2freq = region.RX2Freq if join else session['rx2freq']
+        return (rx2freq, LNS.dndr2rps(region, rx2dr))
 
     @staticmethod
     def join(pdu:bytes, region:ld.Region, *, pdevnonce:int=-1, nwkkey:bytes=b'@ABCDEFGHIJKLMNO',
@@ -165,6 +187,7 @@ class LNS:
                 'rx1delay'  : max(rxdly, 1),
                 'rx1droff'  : rx1droff,
                 'rx2dr'     : rx2dr,
+                'rx2freq'   : region.RX2Freq,
                 'devnonce'  : devnonce,
                 'region'    : region,
                 }

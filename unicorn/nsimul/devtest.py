@@ -125,14 +125,3 @@ class DeviceTest:
         if fcntdn_adj >= 0:
             self.session['fcntdn'] += (1 + fcntdn_adj)
         self.dn(uplwm, pdu, **kwargs)
-
-    @staticmethod
-    def unpack_opts(msg:LoraMsg) -> List[lo.Opt]:
-        m = msg.rtm
-        assert msg.rtm is not None
-        if m['FPort'] is 0:
-            opts = m['FRMPayload']
-            assert len(m['FOpts']) == 0
-        else:
-            opts = m['FOpts']
-        return lo.unpack_optsup(opts)

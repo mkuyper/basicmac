@@ -14,7 +14,7 @@ import loramsg as lm
 import loradefs as ld
 import loraopts as lo
 
-from lorawan import LoraWanMsg
+from lorawan import LNS, LoraWanMsg
 from lwtest import LWTest
 from vtimeloop import VirtualTimeLoop
 
@@ -161,7 +161,7 @@ async def _(dut=createtest):
     dut.dndf(m, 0, lo.pack_opts([lo.DevStatusReq()]))
     m = await dut.updf()
 
-    opts = dut.unpack_opts(m)
+    opts = m.unpack_opts()
     assert len(opts) == 1
     assert type(opts[0]) is lo.DevStatusAns
     print(opts[0])
@@ -178,7 +178,7 @@ async def _(dut=createtest):
         dut.dndf(m, 0, cmd, fopts=cmd)
         m = await dut.updf()
 
-        opts = dut.unpack_opts(m)
+        opts = m.unpack_opts()
         assert len(opts) == 0 and m.rtm['FPort'] != 0
 
     m = await dut.test_updf()
@@ -200,7 +200,7 @@ async def _(dut=createtest):
         dut.dndf(m, 0, lo.pack_opts(opts))
 
         m = await dut.test_updf()
-        opts = dut.unpack_opts(m)
+        opts = m.unpack_opts()
         assert len(opts) == len(chans)
         for i, o in enumerate(opts):
             if chans[i][0] < len(dut.session['region'].upchannels):
@@ -241,7 +241,7 @@ async def _(dut=createtest):
         # repeated while no DL is received
         for i in range(20):
             m = await dut.updf()
-            opts = dut.unpack_opts(m)
+            opts = m.unpack_opts()
             assert len(opts) == 1, f'i={i}, f={f}'
             o, = opts
             assert type(o) is lo.DlChannelAns
@@ -259,7 +259,7 @@ async def _(dut=createtest):
         # check uplink -- DlChannelAns must be cleared
         # *and* DL counter incremented
         m = await dut.test_updf()
-        opts = dut.unpack_opts(m)
+        opts = m.unpack_opts()
         assert len(opts) == 0, f'f={f}'
         dut.unpack_dnctr(m, expected=dc+1)
 
@@ -278,7 +278,7 @@ async def _(dut=createtest):
         # while no DL is received
         for i in range(32):
             m = await dut.updf()
-            opts = dut.unpack_opts(m)
+            opts = m.unpack_opts()
             assert len(opts) == 1, f'ch={ch}, f={f}'
             o, = opts
             assert type(o) is lo.DlChannelAns
@@ -300,12 +300,103 @@ async def _(dut=createtest):
         # check uplink -- DlChannelAns must be cleared
         # *and* DL counter incremented
         m = await dut.test_updf()
-        opts = dut.unpack_opts(m)
+        opts = m.unpack_opts()
         assert len(opts) == 0, f'f={f}'
         dut.unpack_dnctr(m, expected=dc+1)
 
         # make sure invalid channel didn't get enabled somehow
         m = await dut.check_freqs(m, frozenset(ch.freq for ch in region.upchannels))
 
+
+@test('2.12 Confirmed Packets')
+async def _(dut=createtest):
+    m = await dut.start_testmode()
+
+    assert not m.isconfirmed()
+    dc = dut.unpack_dnctr(m)
+    dut.request_mode(m, True)
+
+    # a. Uplink confirmed packets
+    m = await dut.test_updf()
+    assert m.isconfirmed()
+    dc = dut.unpack_dnctr(m, expected=dc+1)
+
+    dut.dndf(m, fctrl=lm.FCtrl.ACK) # empty downlink as ACK
+
+    m = await dut.test_updf()
+    assert m.isconfirmed()
+    dc = dut.unpack_dnctr(m, expected=dc+1)
+
+    # b. Uplink retransmission
+    m2 = await dut.test_updf()
+    assert m2.msg.pdu == m.msg.pdu
+    m = m2
+
+    dut.dndf(m, fctrl=lm.FCtrl.ACK) # empty downlink as ACK
+
+    m = await dut.test_updf()
+    assert m.isconfirmed()
+    dc = dut.unpack_dnctr(m, expected=dc+1)
+
+    # switch back to unconfirmed
+    dut.request_mode(m, False)
+    m = await dut.test_updf()
+    assert not m.isconfirmed()
+    dc = dut.unpack_dnctr(m, expected=dc+1)
+
+    # c. Downlink confirmed packet
+    # d. Downlink retransmission
+    for fcntdn_adj in [0, 0, -1]:
+        dut.request_mode(m, False, confirmed=True, fcntdn_adj=fcntdn_adj)
+
+        m = await dut.test_updf()
+        assert m.isack()
+
+        # counter should also be increased (unless it was a repeat)
+        dc = dut.unpack_dnctr(m, expected=(dc if fcntdn_adj else dc+1), explain=f'fcntdn_adj={fcntdn_adj}')
+
+
+@test('2.13 RXParamSetupReq MAC Command')
+async def _(dut=createtest):
+    m = await dut.start_testmode()
+
+    region = dut.session['region']
+
+    # helper function
+    def check_rpsa(m:LoraWanMsg, msg:str) -> None:
+        opts = m.unpack_opts()
+        assert len(opts) == 1, msg
+        opt, = opts
+        assert type(opt) == lo.RXParamSetupAns, msg
+        assert opt.FreqAck.value == 1, msg
+        assert opt.RX2DRAck.value == 1, msg
+        assert opt.RX1DRoffAck.value == 1, msg
+
+    # Make sure we are DR5 so we can see the rx1droff effect
+    assert LNS.rps2dr(region, m.msg.rps) == 5
+
+    # -- Modify RX1 and RX2 downlink parameters
+    rx1droff, rx2dr, rx2freq = 2, 2, 868525000
+    opt = lo.RXParamSetupReq(RX2DR=rx2dr, RX1DRoff=rx1droff, Freq=rx2freq//100)
+    dut.dndf(m, 0, lo.pack_opts([opt]))
+
+    with dut.modified_session(rx1droff=rx1droff, rx2dr=rx2dr, rx2freq=rx2freq):
+        m = await dut.updf()
+        check_rpsa(m, None)
+
+        m = await dut.echo(m, b'\1\2\3')
+        m = await dut.echo(m, b'\4\5\6', rx2=True)
+
+        # -- Restore default downlink parameters
+        dut.dndf(m, 0, lo.pack_opts([lo.RXParamSetupReq(RX2DR=region.RX2DR, RX1DRoff=0, Freq=region.RX2Freq//100)]))
+
+    # -- Test reply transmission
+    for i in range(2):
+        m = await dut.updf()
+        check_rpsa(m, f'iteration {i+1}')
+
+    m = await dut.echo(m, b'\1\2\3')
+    assert len(m.unpack_opts()) ==  0
+    m = await dut.echo(m, b'\1\2\3', rx2=True)
 
 asyncio.set_event_loop(VirtualTimeLoop())

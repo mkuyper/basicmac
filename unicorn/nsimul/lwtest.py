@@ -4,15 +4,16 @@
 # This file is subject to the terms and conditions defined in file 'LICENSE',
 # which is part of this source code package.
 
-from typing import cast, Any, Dict, Optional, Set, Tuple
+from typing import cast, Any, Dict, Generator, Optional, Set, Tuple
 
+import contextlib
 import struct
 
 import loramsg as lm
 import loraopts as lo
 
 from devtest import explain, DeviceTest
-from lorawan import LoraWanMsg
+from lorawan import LoraWanMsg, Session
 
 from ward import expect
 
@@ -101,3 +102,19 @@ class LWTest(DeviceTest):
         m = await self.upstats(count, fstats=fstats)
         expect.assert_equal(fstats.keys(), freqs, explain('Unexpected channel usage', **kwargs))
         return m
+
+    @contextlib.contextmanager
+    def modified_session(self, **kwargs:Any) -> Generator[None,None,None]:
+        session = self.session
+        changed:Dict[str,Any] = {}
+        added:List[str] = []
+        for key in kwargs:
+            if key in session:
+                changed[key] = session[key]
+            else:
+                added.append(key)
+            session[key] = kwargs[key]
+        yield
+        session.update(changed)
+        for key in added:
+            del session[key]
