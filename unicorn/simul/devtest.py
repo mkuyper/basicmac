@@ -3,14 +3,14 @@
 # This file is subject to the terms and conditions defined in file 'LICENSE',
 # which is part of this source code package.
 
-from typing import Any, Callable, List, Optional, TextIO
+from typing import Any, Callable, List, Generator, Optional, TextIO
 
 import asyncio
 import os
 import shlex
 import sys
 
-from ward import expect
+from ward import expect, fixture, Scope
 from colorama import Fore, Style
 
 import rtlib as rt
@@ -24,6 +24,7 @@ from lorawan import LNS, LoraWanFormatter, LoraWanMsg, Gateway, Session, Session
 from medium import LoraMsg, Rps, SimpleMedium
 from peripherals import Radio
 from runtime import Runtime
+from vtimeloop import VirtualTimeLoop
 
 def explain(s:Optional[str]='', *, explain:Optional[str]=None, **kwargs:Any) -> Optional[str]:
     if s is None:
@@ -32,6 +33,13 @@ def explain(s:Optional[str]='', *, explain:Optional[str]=None, **kwargs:Any) -> 
         else:
             s = ''
     return s if explain is None else f'{s} ({explain})'
+
+@fixture(scope=Scope.Module) # type: ignore
+def vtime() -> Generator[None,None,None]:
+    loop = asyncio.get_event_loop()
+    asyncio.set_event_loop(VirtualTimeLoop()) # type: ignore
+    yield
+    asyncio.set_event_loop(loop)
 
 class LogWriter:
     def __init__(self, buf:TextIO) -> None:
