@@ -4,11 +4,12 @@
 # This file is subject to the terms and conditions defined in file 'LICENSE',
 # which is part of this source code package.
 
-from typing import Callable, Optional, Set, Tuple
+from typing import Any, Callable, Optional, Set, Tuple
 
 import asyncio
 import math
 
+from eventhub import EventHub
 from runtime import Job, JobGroup, Runtime
 
 class Rps:
@@ -82,7 +83,7 @@ class Rps:
 class LoraMsg:
     def __init__(self, time:float, pdu:bytes, freq:int, rps:int, *,
             xpow:Optional[float]=None, rssi:Optional[float]=None, snr:Optional[float]=None,
-            dro:Optional[int]=None, npreamble:int=8) -> None:
+            dro:Optional[int]=None, npreamble:int=8, src:Optional[Any]=None) -> None:
 
         assert len(pdu) >= 0 and len(pdu) <= 255
         Rps.validate(rps)
@@ -106,6 +107,7 @@ class LoraMsg:
         self.snr = snr
         self.dro = dro
         self.npreamble = npreamble
+        self.src = src
 
         Tpreamble, Tpayload = self.airtimes()
         self.xbeg = time
@@ -139,7 +141,7 @@ class LoraMsg:
     def airtimes(self) -> Tuple[float,float]:
         Ts = LoraMsg.symtime(self.rps)
         if Rps.isFSK(self.rps):
-            return (5*Ts, (3+1+2+len(self.pdu))*Ts)
+            return (8*Ts, (3+1+2+len(self.pdu))*Ts)
         # Length/time of preamble
         Tpreamble = (self.npreamble + 4.25) * Ts
         # Symbol length of payload and time
@@ -175,9 +177,10 @@ class Medium(LoraMsgProcessor):
         pass
 
 class SimpleMedium(Medium):
-    def __init__(self) -> None:
+    def __init__(self, evhub:Optional[EventHub]=None) -> None:
         self.pmsg:Set['LoraMsg'] = set()
         self.listeners:Set['LoraMsgProcessor'] = set()
+        self.evhub = evhub
 
     def add_listener(self, proc:LoraMsgProcessor, t:Optional[float]=None) -> None:
         self.listeners.add(proc)
@@ -188,6 +191,8 @@ class SimpleMedium(Medium):
         self.listeners.remove(proc)
 
     def msg_preamble(self, msg:LoraMsg, t:Optional[float]=None) -> None:
+        if self.evhub:
+            self.evhub.event(EventHub.LORA, src=self, msg=msg)
         self.pmsg.add(msg)
         for l in self.listeners:
             l.msg_preamble(msg)
@@ -249,6 +254,9 @@ class LoraMsgReceiver(LoraMsgProcessor):
         self.locked = False
 
     def receive(self, rxtime:float, freq:int, rps:int, *, minsyms:int=5) -> None:
+        if Rps.isFSK(rps):
+            rps = 0
+
         self.freq = freq
         self.rps = rps
         self.minsyms = minsyms

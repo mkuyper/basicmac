@@ -191,7 +191,7 @@ class Radio(Peripheral):
     def svc_tx(self) -> None:
         now = self.sim.runtime.clock.time()
         msg = LoraMsg(now, bytes(self.reg.buf[:self.reg.plen]), self.reg.freq, self.reg.rps,
-                xpow=self.reg.xpow, npreamble=self.reg.npreamble)
+                xpow=self.reg.xpow, npreamble=self.reg.npreamble, src=self)
         self.xmtr.transmit(msg)
 
     svc_lookup = {

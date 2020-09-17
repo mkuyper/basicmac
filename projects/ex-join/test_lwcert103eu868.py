@@ -4,7 +4,7 @@
 # This file is subject to the terms and conditions defined in file 'LICENSE',
 # which is part of this source code package.
 
-from typing import Generator, List, Tuple
+from typing import Generator, List, Optional, Tuple
 
 import asyncio
 import itertools
@@ -15,7 +15,7 @@ import loradefs as ld
 import loraopts as lo
 
 from lorawan import LNS, LoraWanMsg
-from lwtest import LWTest
+from lwtest import LWTest, PowerStats
 from vtimeloop import VirtualTimeLoop
 
 from ward import fixture, test
@@ -59,7 +59,6 @@ async def _(dut=createtest):
     extra_ch = [ ld.ChDef(freq=867850000, minDR=0, maxDR=5) ]
     reg = ld.Region_EU868()
     reg.upchannels += extra_ch
-
     dut.gateway.regions.append(reg)
 
     joinopts = [
@@ -85,7 +84,7 @@ async def _(dut=createtest):
         # test used frequencies
         fstats = {}
         chans = dut.session['region'].upchannels
-        m = await dut.upstats(16 * len(chans), fstats=fstats)
+        m = await dut.upstats(m, 16 * len(chans), fstats=fstats)
         assert set(fstats.keys()) == set(ch[0] for ch in chans), f'{jo}'
 
     return True
@@ -373,7 +372,7 @@ async def _(dut=createtest):
         assert opt.RX1DRoffAck.value == 1, msg
 
     # Make sure we are DR5 so we can see the rx1droff effect
-    assert LNS.rps2dr(region, m.msg.rps) == 5
+    assert m.dr == 5
 
     # -- Modify RX1 and RX2 downlink parameters
     rx1droff, rx2dr, rx2freq = 2, 2, 868525000
@@ -432,6 +431,181 @@ async def _(dut=createtest):
     m = await dut.echo(m, b'\1\2\3')
     assert len(m.unpack_opts()) == 0
     m = await dut.echo(m, b'\4\5\6', rx2=True)
+
+
+@test('2.15 LinkADRReq MAC Command')
+async def _(dut=createtest):
+    m = await dut.start_testmode()
+
+    def check_laa(m:LoraWanMsg, msg:str) -> None:
+        opts = m.unpack_opts()
+        assert len(opts) == 1, msg
+        opt, = opts
+        dut.check_laa_o(opt, explain=msg)
+
+    def check_laa_block(m:LoraWanMsg, n:int, *, ChAck:Optional[int]=1, DRAck:Optional[int]=1, TXPowAck:Optional[int]=1, msg:str) -> None:
+        opts = m.unpack_opts()
+        assert len(opts) == n, msg
+        # check that all have the correct type
+        assert [type(o) for o in opts] == [lo.LinkADRAns for _ in range(n)], msg
+        # check that all have the same value
+        opt = opts[-1]
+        assert list(opts) == [opt for _ in range(n)], msg
+        # verify last one (others are identical)
+        dut.check_laa_o(opt, ChAck, DRAck, TXPowAck, explain=msg)
+
+    async def ncr_optdr(m:LoraWanMsg, freq:int, msg:str) -> LoraWanMsg:
+        dut.dndf(m, 0, lo.pack_opts([lo.NewChannelReq(Chnl=3, Freq=freq//100, MinDR=0, MaxDR=7)]))
+        m = await dut.updf(explain=msg)
+        opts = m.unpack_opts()
+        assert len(opts) == 1, msg
+        opt, = opts
+        dut.check_ncr_o(opt, explain=msg)
+        return m
+
+    # a. ADR bit
+    assert m.isadren()
+
+    # b. TXPower
+    dut.dndf(m, 0, lo.pack_opts([lo.LinkADRReq(TXPow=7, DR=5, ChMaskCntl=6)]))
+    m = await dut.updf()
+    check_laa(m, 'txpower=7')
+
+    pstats = PowerStats()
+    m = await dut.upstats(m, 3, pstats=pstats)
+    rssi0 = pstats.avg()
+
+    dut.dndf(m, 0, lo.pack_opts([lo.LinkADRReq(TXPow=0, DR=5, ChMaskCntl=6)]))
+    m = await dut.updf()
+    check_laa(m, 'txpower=0')
+
+    pstats.reset()
+    m = await dut.upstats(m, 3, pstats=pstats)
+    rssi1 = pstats.avg()
+
+    print(f'RSSI @  2dBm: {rssi0:6.1f} dBm')
+    print(f'RSSI @ 16dBm: {rssi1:6.1f} dBm')
+    print(f'Difference:   {rssi1-rssi0:6.1f} dBm')
+    assert rssi0 > -80 and rssi0 < -10
+    assert rssi1 > -80 and rssi1 < -10
+    assert (rssi1 - rssi0) >= 6
+
+    # c. Required DataRates
+    for dr in range(6):
+        dut.dndf(m, 0, lo.pack_opts([lo.LinkADRReq(TXPow=0, DR=dr, ChMaskCntl=6)]))
+        m = await dut.updf()
+        check_laa(m, f'dr={dr}')
+        assert m.dr == dr
+
+    # d. Optional DataRates
+    nchannel = ld.ChDef(freq=869100000, minDR=0, maxDR=7)
+    reg = ld.Region_EU868()
+    reg.upchannels.append(nchannel)
+    dut.gateway.regions.append(reg)
+
+    m = await ncr_optdr(m, nchannel.freq, 'create new channel')
+    for dr in range(6, 8):
+        dut.dndf(m, 0, lo.pack_opts([lo.LinkADRReq(TXPow=0, DR=dr, ChMaskCntl=6)]))
+        m = await dut.updf()
+        check_laa(m, f'dr={dr}')
+        assert m.msg.freq == nchannel.freq, f'dr={dr}'
+        assert m.dr == dr, f'dr={dr}'
+    m = await ncr_optdr(m, 0, 'delete new channel')
+    assert m.msg.freq in list(ch.freq for ch in dut.session['region'].upchannels)
+
+    # e. ChannelMask
+    dut.dndf(m, 0, lo.pack_opts([lo.NewChannelReq(Chnl=3, Freq=nchannel.freq//100, MinDR=0, MaxDR=5),
+        lo.LinkADRReq(TXPow=5, DR=5, ChMaskCntl=0, ChMask=7)]))
+
+    m = await dut.updf()
+    opts = m.unpack_opts()
+    assert len(opts) == 2
+    opt1, opt2 = opts
+    dut.check_ncr_o(opt1)
+    dut.check_laa_o(opt2)
+
+    m = await dut.check_freqs(m, frozenset(ch.freq for ch in dut.session['region'].upchannels))
+
+    dut.dndf(m, 0, lo.pack_opts([lo.LinkADRReq(TXPow=5, DR=5, ChMaskCntl=0, ChMask=0xf)]))
+
+    m = await dut.updf()
+    check_laa(m, 'chmask=0xf')
+
+    m = await dut.check_freqs(m, frozenset(ch.freq for ch in reg.upchannels))
+
+    dut.dndf(m, 0, lo.pack_opts([lo.LinkADRReq(TXPow=5, DR=5, ChMaskCntl=0, ChMask=0)]))
+
+    m = await dut.updf()
+    opts = m.unpack_opts()
+    assert len(opts) == 1
+    opt, = opts
+    dut.check_laa_o(opt, ChAck=0, DRAck=None, TXPowAck=None)
+
+    dut.dndf(m, 0, lo.pack_opts([lo.NewChannelReq(Chnl=3, Freq=0)]))
+
+    m = await dut.updf()
+    opts = m.unpack_opts()
+    assert len(opts) == 1
+    opt, = opts
+    dut.check_ncr_o(opt)
+
+    # f. Redundancy
+    dut.dndf(m, 0, lo.pack_opts([lo.LinkADRReq(DR=5, ChMaskCntl=6, NbTrans=2)]))
+    m = await dut.updf()
+    check_laa(m, 'nbtrans=2')
+
+    l = [await dut.updf() for _ in range(3)]
+
+    assert l[0].rtm['MIC'] == m.rtm['MIC']
+    assert l[2].rtm['MIC'] == l[1].rtm['MIC']
+
+    m = l[-1]
+    dut.dndf(m, 0, lo.pack_opts([lo.LinkADRReq(DR=5, ChMaskCntl=6, NbTrans=1)]))
+    m = await dut.updf()
+    check_laa(m, 'nbtrans=1')
+
+    # g. ADRACKReq bit
+    dut.dndf(m)
+
+    for i in range(64):
+        m = await dut.updf()
+        assert m.isadrarq() == False, f'iter={i}'
+        assert m.dr == 5, f'iter={i}'
+    for dr in [5, 4, 3]:
+        for i in range(32):
+            m = await dut.updf()
+            assert m.isadrarq() == True, f'dr={dr}, iter={i}'
+            assert m.dr == dr, f'dr={dr}, iter={i}'
+
+    dut.dndf(m, 0, lo.pack_opts([lo.LinkADRReq(DR=5, ChMaskCntl=6)]))
+    m = await dut.updf()
+    check_laa(m, 'dr=5')
+    assert m.dr == 5
+
+    # h. a.. Successful LinkADRReq commands block
+    dut.dndf(m, 0, lo.pack_opts([lo.LinkADRReq(ChMaskCntl=0, ChMask=0),
+        lo.LinkADRReq(TXPow=4, DR=4, ChMaskCntl=0, ChMask=3, NbTrans=1),
+        lo.LinkADRReq(TXPow=0, DR=3, ChMaskCntl=6, ChMask=0, NbTrans=1)]))
+    m = await dut.updf()
+    check_laa_block(m, 3, msg='linkadrreq block')
+
+    m = await dut.check_freqs(m, frozenset(ch.freq for ch in dut.session['region'].upchannels))
+
+    dut.dndf(m, 0, lo.pack_opts([lo.LinkADRReq(DR=5, ChMaskCntl=6)]))
+    m = await dut.updf()
+    check_laa(m, 'dr=5')
+    assert m.dr == 5
+
+    # h. b.. Unsuccessful LinkADRReq commands block
+    dut.dndf(m, 0, lo.pack_opts([lo.LinkADRReq(ChMask=0x07, DR=4, TXPow=4),
+        lo.LinkADRReq(ChMaskCntl=0, ChMask=0)]))
+
+    m = await dut.updf()
+    check_laa_block(m, 2, ChAck=0, DRAck=None, TXPowAck=None, msg='invalid linkadrreq block')
+    assert m.dr == 5
+
+    dut.dndf(m) # empty downlink to avoid timeout (?)
+    m = await dut.check_freqs(m, frozenset(ch.freq for ch in dut.session['region'].upchannels))
 
 
 asyncio.set_event_loop(VirtualTimeLoop())
