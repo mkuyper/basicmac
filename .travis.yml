@@ -14,6 +14,7 @@ addons:
 before_install:
 
 install:
+- pip3 install -r basicloader/requirements.txt
 
 before_script:
 
