@@ -35,16 +35,8 @@ include ../projects.gmk
 
 ifeq (simul,$(VARIANT))
 test: build-$(VARIANT)/$(PROJECT).hex
-	/bin/false
-
-xxx-test: build-$(VARIANT)/$(PROJECT).hex
-	PYTHONPATH=$${PYTHONPATH}:$(TOPDIR)/tools/pylora:$(TOPDIR)/unicorn/simul \
-		   $(TOPDIR)/unicorn/simul/lwtest.py \
-		   -r EU868 \
-		   -v -d -t \
-		   $(TESTOPTS) \
-		   $(BL)/build/boards/$(BL_BRD)/bootloader.hex \
-		   $<
+	PYTHONPATH=$${PYTHONPATH}:$(TOPDIR)/unicorn/simul \
+		   ward
 
 apptest: build-$(VARIANT)/$(PROJECT).hex
 	PYTHONPATH=$${PYTHONPATH}:$(TOPDIR)/tools/pylora:$(TOPDIR)/unicorn/simul \

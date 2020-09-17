@@ -1,0 +1,5 @@
+colorama
+intelhex
+liblora
+unicorn
+git+https://github.com/mkuyper/ward.git

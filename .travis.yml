@@ -15,8 +15,9 @@ before_install:
 
 install:
 - pip3 install -r basicloader/requirements.txt
+- pip3 install -r requirements.txt
 
 before_script:
 
 script:
-- make -C basicloader && cd projects/ex-join && make
+- make -C basicloader && cd projects/ex-join && make && VARIANT=simul make test
