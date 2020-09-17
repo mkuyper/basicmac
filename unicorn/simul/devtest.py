@@ -6,6 +6,8 @@
 from typing import Any, Callable, List, Optional, TextIO
 
 import asyncio
+import os
+import shlex
 import sys
 
 from ward import expect
@@ -71,7 +73,7 @@ class LoggingEventHub(EventHub):
             self.writer.write(f'{s}\n', style=Fore.GREEN)
 
 class DeviceTest:
-    def __init__(self, hexfiles:List[str]) -> None:
+    def __init__(self, *, hexfiles:Optional[List[str]]=None) -> None:
         self.runtime = Runtime()
         self.sm = SessionManager()
         self.log = LoggingEventHub(ColoramaStream(sys.stdout), sm=self.sm)
@@ -80,6 +82,10 @@ class DeviceTest:
         self.session:Optional[Session] = None
 
         self.sim = Simulation(self.runtime, context={ 'evhub': self.log, 'medium': self.medium})
+
+        if hexfiles is None:
+            hexfiles = shlex.split(os.environ.get('TEST_HEXFILES', ''))
+
         for hf in hexfiles:
             self.sim.load_hexfile(hf)
 

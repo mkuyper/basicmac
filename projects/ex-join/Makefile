@@ -34,8 +34,9 @@ LMICCFG += extapi
 include ../projects.gmk
 
 ifeq (simul,$(VARIANT))
-test: build-$(VARIANT)/$(PROJECT).hex
+test: build-$(VARIANT)/$(PROJECT).hex $(BL_BUILD)/bootloader.hex
 	PYTHONPATH=$${PYTHONPATH}:$(TOPDIR)/unicorn/simul \
+		   TEST_HEXFILES='$^' \
 		   ward
 
 apptest: build-$(VARIANT)/$(PROJECT).hex
