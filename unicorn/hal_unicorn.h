@@ -10,6 +10,30 @@
 #include "hw.h"
 #include "boottab.h"
 
+extern void* HAL_svc;
+
+// peripherals
+enum {
+    HAL_PID_NVIC,
+    HAL_PID_DEBUG,
+    HAL_PID_TIMER,
+    HAL_PID_RADIO,
+
+    HAL_PID_COUNT
+};
+
+void nvic_init (void);
+void nvic_sethandler (uint32_t pid, void* handler);
+
+void dbg_init (void);
+
+void timer_init (void);
+uint64_t timer_ticks (void);
+uint64_t timer_extend (uint32_t ticks);
+void timer_set (uint64_t target);
+
+void radio_halinit (void);
+
 uint32_t pio_irq_get (void);
 void pio_irq_clear (uint32_t mask);
 void pio_irq_enable (unsigned int gpio, bool enable);
@@ -46,6 +70,5 @@ typedef struct {
 
     uint32_t version;
 } hal_fwhdr;
-
 
 #endif
