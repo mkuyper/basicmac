@@ -10,16 +10,6 @@
 #include "hw.h"
 #include "boottab.h"
 
-// TODO - move this enum to bootloader (boottab.h)
-enum {
-    SVC_PANIC       = 0,          // panic
-    SVC_PERIPH_REG  = 1,          // register peripheral
-    SVC_WFI         = 2,          // sleep / wait for interrupt
-    SVC_IRQ         = 3,          // run IRQ handlers (if pending and enabled)
-
-    SVC_PERIPH_BASE = 0x01000000, // base for peripheral functions
-};
-
 extern void* HAL_svc;
 
 // peripherals
@@ -39,6 +29,7 @@ void dbg_init (void);
 
 void timer_init (void);
 uint64_t timer_ticks (void);
+uint64_t timer_extend (uint32_t ticks);
 void timer_set (uint64_t target);
 
 void radio_halinit (void);
@@ -79,6 +70,5 @@ typedef struct {
 
     uint32_t version;
 } hal_fwhdr;
-
 
 #endif

@@ -80,13 +80,8 @@ void hal_enableIRQs (void) {
     }
 }
 
-static uint64_t extend (uint32_t ticks) {
-    uint64_t c = timer_ticks();
-    return c + (((int32_t) ticks - (int32_t) c));
-}
-
 void hal_sleep (u1_t type, u4_t targettime) {
-    timer_set(extend(targettime));
+    timer_set(timer_extend(targettime));
     wfi();
 }
 
@@ -106,8 +101,7 @@ void hal_waitUntil (u4_t time) {
         if( ((s4_t) (time - now)) <= 0 ) {
             return;
         }
-        // TODO - sleep
-        wfi();
+        hal_sleep(0, time);
     }
 }
 

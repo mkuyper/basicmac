@@ -104,6 +104,11 @@ uint64_t timer_ticks (void) {
     return reg->ticks;
 }
 
+uint64_t timer_extend (uint32_t ticks) {
+    uint64_t c = timer_ticks();
+    return c + (((int32_t) ticks - (int32_t) c));
+}
+
 void timer_set (uint64_t target) {
     timer_reg* reg = PERIPH_REG(HAL_PID_TIMER);
     reg->target = target;
@@ -150,7 +155,6 @@ enum {
 };
 
 static void radio_irq (void) {
-    debug_printf("radio_irq()\r\n");
     psvc(HAL_PID_RADIO, RADIO_PSVC_CLEARIRQ);
     radio_reg* reg = PERIPH_REG(HAL_PID_RADIO);
     radio_irq_handler(0, reg->xtime);
@@ -224,7 +228,7 @@ void radio_startrx (bool rxcontinuous) {
 
     radio_reg* reg = PERIPH_REG(HAL_PID_RADIO);
 
-    reg->xtime = LMIC.rxtime; // XXX - extend to xticks!
+    reg->xtime = timer_extend(LMIC.rxtime);
     reg->freq = LMIC.freq;
     reg->rps = LMIC.rps;
     reg->npreamble = LMIC.rxsyms;
