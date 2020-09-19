@@ -376,7 +376,8 @@ enum {
     DMA_CB_HALF     = (1 << 0),
     DMA_CB_COMPLETE = (1 << 1),
 };
-void dma_config (unsigned int ch, unsigned int peripheral, unsigned int ccr, unsigned int flags, void (*callback) (int));
+typedef void (*dma_cb) (int status, void* arg);
+void dma_config (unsigned int ch, unsigned int peripheral, unsigned int ccr, unsigned int flags, dma_cb callback, void* arg);
 int dma_deconfig (unsigned int ch);
 void dma_transfer (unsigned int ch, volatile void* paddr, void* maddr, int n);
 

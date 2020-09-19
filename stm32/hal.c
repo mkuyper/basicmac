@@ -1062,10 +1062,11 @@ const irqdef HAL_irqdefs[] = {
 #endif
 
 #if defined(BRD_USART)
-#if BRD_USART == 1
-    { USART1_IRQn, usart_irq },
-#elif BRD_USART == BRD_LPUART(1)
-    { LPUART1_IRQn, usart_irq },
+#if BRD_USART_EN(BRD_USART1)
+    { USART1_IRQn, usart1_irq },
+#endif
+#if BRD_USART_EN(BRD_LPUART1)
+    { LPUART1_IRQn, lpuart1_irq },
 #endif
 #endif
 
