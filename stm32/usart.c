@@ -29,7 +29,6 @@ typedef struct {
     uint32_t enb;               // peripheral clock enable bit
     uint32_t irqn;              // IRQ number
     uint32_t (*brr) (uint32_t); // baud rate conversion function
-    void (*rxtout) (osjob_t*);  // RX timeout function
     struct {
         uint8_t tx, rx;         // DMA channels
         uint8_t pid;            // DMA peripheral ID
@@ -58,14 +57,12 @@ uint32_t br2brr_lp (uint32_t br) {
 
 #if BRD_USART_EN(BRD_USART1)
 static usart_state state_u1;
-static void rxtout_u1 (osjob_t*);
 static const usart_port port_u1 = {
     .port    = USART1,
     .enr     = &RCC->APB2ENR,
     .enb     = RCC_APB2ENR_USART1EN,
     .irqn    = USART1_IRQn,
     .brr     = br2brr,
-    .rxtout  = rxtout_u1,
 #ifdef BRD_USART2_DMA
     .dma.tx  = BRD_DMA_CHAN_A(BRD_USART1_DMA),
     .dma.rx  = BRD_DMA_CHAN_B(BRD_USART1_DMA),
@@ -81,21 +78,16 @@ const void* const usart_port_u1 = &port_u1;
 void usart1_irq (void) {
     usart_irq(usart_port_u1);
 }
-static void rxtout_u1 (osjob_t* job) {
-    usart_abort_recv(usart_port_u1);
-}
 #endif
 
 #if BRD_USART_EN(BRD_USART2)
 static usart_state state_u2;
-static void rxtout_u2 (osjob_t*);
 static const usart_port port_u2 = {
     .port    = USART2,
     .enr     = &RCC->APB1ENR,
     .enb     = RCC_APB1ENR_USART2EN,
     .irqn    = USART2_IRQn,
     .brr     = br2brr,
-    .rxtout  = rxtout_u2,
 #ifdef BRD_USART2_DMA
     .dma.tx  = BRD_DMA_CHAN_A(BRD_USART2_DMA),
     .dma.rx  = BRD_DMA_CHAN_B(BRD_USART2_DMA),
@@ -111,21 +103,16 @@ const void* const usart_port_u2 = &port_u2;
 void usart2_irq (void) {
     usart_irq(usart_port_u2);
 }
-static void rxtout_u2 (osjob_t* job) {
-    usart_abort_recv(usart_port_u2);
-}
 #endif
 
 #if BRD_USART_EN(BRD_LPUART1)
 static usart_state state_lpu1;
-static void rxtout_lpu1 (osjob_t*);
 static const usart_port port_lpu1 = {
     .port    = LPUART1,
     .enr     = &RCC->APB1ENR,
     .enb     = RCC_APB2ENR_USART1EN,
     .irqn    = LPUART1_IRQn,
     .brr     = br2brr_lp,
-    .rxtout  = rxtout_lpu1,
 #ifdef BRD_LPUART1_DMA
     .dma.tx  = BRD_DMA_CHAN_A(BRD_LPUART1_DMA),
     .dma.rx  = BRD_DMA_CHAN_B(BRD_LPUART1_DMA),
@@ -140,9 +127,6 @@ static const usart_port port_lpu1 = {
 const void* const usart_port_lpu1 = &port_lpu1;
 void lpuart1_irq (void) {
     usart_irq(usart_port_lpu1);
-}
-static void rxtout_lpu1 (osjob_t* job) {
-    usart_abort_recv(usart_port_lpu1);
 }
 #endif
 
@@ -304,6 +288,28 @@ void usart_abort_recv (const void* port) {
     hal_enableIRQs();
 }
 
+static bool _rx_timeout(osjob_t* job, const usart_port* usart) {
+    if( usart->state->rx.job == job ) {
+        usart_abort_recv(usart);
+        return true;
+    } else {
+        return false;
+    }
+}
+
+static void rx_timeout (osjob_t* job) {
+#if BRD_USART_EN(BRD_USART1)
+    if( _rx_timeout(job, usart_port_u1) ) return;
+#endif
+#if BRD_USART_EN(BRD_USART2)
+    if( _rx_timeout(job, usart_port_u2) ) return;
+#endif
+#if BRD_USART_EN(BRD_LPUART1)
+    if( _rx_timeout(job, usart_port_lpu1) ) return;
+#endif
+    ASSERT(0);
+}
+
 void usart_recv (const void* port, void* dst, int* n, ostime_t timeout, osjob_t* job, osjobcb_t cb) {
     const usart_port* usart = port;
 
@@ -311,7 +317,7 @@ void usart_recv (const void* port, void* dst, int* n, ostime_t timeout, osjob_t*
     usart->state->rx.cb = cb;
     usart->state->rx.pn = n;
 
-    os_setTimedCallback(usart->state->rx.job, os_getTime() + timeout, usart->rxtout);
+    os_setTimedCallback(usart->state->rx.job, os_getTime() + timeout, rx_timeout);
 
     rx_on(usart);
     dma_transfer(usart->dma.rx, &usart->port->RDR, dst, *n);
