@@ -50,7 +50,9 @@ uint32_t br2brr (uint32_t br) {
 
 #if BRD_USART_EN(BRD_LPUART1)
 uint32_t br2brr_lp (uint32_t br) {
-    return ((32000000U << 7) / br) << 1;
+    uint32_t brr = ((32000000U << 7) / br) << 1;
+    ASSERT(brr >= 0x300);
+    return brr;
 }
 #endif
 
