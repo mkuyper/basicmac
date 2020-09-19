@@ -54,16 +54,21 @@
 #define GPIO_MISO       BRD_GPIO_AF(PORT_A, 6, 0)
 #define GPIO_MOSI       BRD_GPIO_AF(PORT_A, 7, 0)
 
-#define GPIO_BOOT_LED   BRD_GPIO(PORT_A, 5) // -- LED is shared with SCK!!
-//#define GPIO_DBG_LED  BRD_GPIO(PORT_A, 5) // -- LED is shared with SCK!!
-#define GPIO_DBG_TX     BRD_GPIO_AF(PORT_A, 2, 4)
-#define GPIO_DBG_RX     BRD_GPIO_AF(PORT_A, 3, 4)
-#define BRD_DBG_UART    2
+// Enabled USART peripherals
+#define BRD_USART       (BRD_LPUART1 | BRD_USART2)
 
-#define BRD_USART       BRD_LPUART(1)
-#define BRD_USART_DMA   BRD_DMA_CHANS(2,3)
-#define GPIO_USART_TX   BRD_GPIO_AF(PORT_C, 4, 2)
-#define GPIO_USART_RX   BRD_GPIO_AF(PORT_C, 5, 2)
+// LPUART1
+#define BRD_LPUART1_DMA  BRD_DMA_CHANS(2,3)
+#define GPIO_LPUART1_TX  BRD_GPIO_AF(PORT_C, 4, 2)
+#define GPIO_LPUART1_RX  BRD_GPIO_AF(PORT_C, 5, 2)
+
+// USART2
+#define GPIO_USART2_TX  BRD_GPIO_AF(PORT_A, 2, 4)
+#define GPIO_USART2_RX  BRD_GPIO_AF(PORT_A, 3, 4)
+
+// Debug LED / USART
+//#define GPIO_DBG_LED  BRD_GPIO(PORT_A, 5) // -- LED is shared with SCK!!
+#define BRD_DBG_UART    BRD_USART2_PORT
 
 // power consumption
 
@@ -126,7 +131,6 @@
 #define GPIO_USART1_RX  BRD_GPIO_AF(PORT_A, 10, 4)
 
 // USART2
-//#define BRD_USART1_DMA  BRD_DMA_CHANS(2,3)
 #define GPIO_USART2_TX  BRD_GPIO_AF(PORT_A, 2, 4)
 #define GPIO_USART2_RX  BRD_GPIO_AF(PORT_A, 3, 4)
 

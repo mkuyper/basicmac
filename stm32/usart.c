@@ -44,13 +44,13 @@ static void usart_irq (const usart_port* usart);
 
 #if BRD_USART_EN(BRD_USART1 | BRD_USART2)
 uint32_t br2brr (uint32_t br) {
-    return ((32000000U << 7) / br) << 1;
+    return 32000000U / br;
 }
 #endif
 
 #if BRD_USART_EN(BRD_LPUART1)
 uint32_t br2brr_lp (uint32_t br) {
-    return 32000000U / br;
+    return ((32000000U << 7) / br) << 1;
 }
 #endif
 
