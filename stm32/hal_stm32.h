@@ -60,16 +60,6 @@ typedef struct {
 // Personalization data
 #define HAL_PERSODATA_BASE PERSODATA_BASE
 
-// USART
-#if defined(BRD_USART)
-#if BRD_USART_EN(BRD_USART1)
-void usart1_irq (void);
-#endif
-#if BRD_USART_EN(BRD_LPUART1)
-void lpuart1_irq (void);
-#endif
-#endif
-
 void i2c_irq (void);
 
 #if defined(SVC_fuota)

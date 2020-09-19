@@ -47,6 +47,10 @@
 #define BRD_USART2                      (1 << 1)
 #define BRD_LPUART1                     (1 << 2)
 
+#define BRD_USART1_PORT                 usart_port_u1
+#define BRD_USART2_PORT                 usart_port_u2
+#define BRD_LPUART1_PORT                usart_port_lpu1
+
 #define BRD_USART_EN(m)                 (((BRD_USART) & (m)) != 0)
 
 

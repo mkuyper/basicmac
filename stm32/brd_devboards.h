@@ -117,16 +117,22 @@
 #define GPIO_MISO       BRD_GPIO_AF(PORT_A, 6, 0)
 #define GPIO_MOSI       BRD_GPIO_AF(PORT_A, 7, 0)
 
-#define GPIO_DBG_LED    GPIO_LED4
-//#define GPIO_DBG_TX   BRD_GPIO_AF(PORT_A, 2, 4)
-//#define GPIO_DBG_RX     BRD_GPIO_AF(PORT_A, 3, 4)
-//#define BRD_DBG_UART  2
+// Enabled USART peripherals
+#define BRD_USART       (BRD_USART1 | BRD_USART2)
 
-#define BRD_USART       BRD_USART1
-
+// USART1
 #define BRD_USART1_DMA  BRD_DMA_CHANS(2,3)
 #define GPIO_USART1_TX  BRD_GPIO_AF(PORT_A,  9, 4)
 #define GPIO_USART1_RX  BRD_GPIO_AF(PORT_A, 10, 4)
+
+// USART2
+//#define BRD_USART1_DMA  BRD_DMA_CHANS(2,3)
+#define GPIO_USART2_TX  BRD_GPIO_AF(PORT_A, 2, 4)
+#define GPIO_USART2_RX  BRD_GPIO_AF(PORT_A, 3, 4)
+
+// Debug LED / USART
+#define GPIO_DBG_LED    GPIO_LED4
+#define BRD_DBG_UART    BRD_USART2_PORT
 
 // power consumption
 

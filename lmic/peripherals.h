@@ -42,6 +42,7 @@ void usart_stop (const void* port);
 void usart_send (const void* port, void* src, int n, osjob_t* job, osjobcb_t cb);
 void usart_recv (const void* port, void* dst, int* n, ostime_t timeout, osjob_t* job, osjobcb_t cb);
 void usart_abort_recv (const void* port);
+void usart_str (const void* port, const char* str);
 
 #endif
 
