@@ -1062,10 +1062,14 @@ const irqdef HAL_irqdefs[] = {
 #endif
 
 #if defined(BRD_USART)
-#if BRD_USART == 1
-    { USART1_IRQn, usart_irq },
-#elif BRD_USART == BRD_LPUART(1)
-    { LPUART1_IRQn, usart_irq },
+#if BRD_USART_EN(BRD_USART1)
+    { USART1_IRQn, usart1_irq },
+#endif
+#if BRD_USART_EN(BRD_USART2)
+    { USART2_IRQn, usart2_irq },
+#endif
+#if BRD_USART_EN(BRD_LPUART1)
+    { LPUART1_IRQn, lpuart1_irq },
 #endif
 #endif
 
@@ -1115,45 +1119,16 @@ void hal_setBattLevel (u1_t level) {
 
 #ifdef CFG_DEBUG
 
-#if BRD_DBG_UART == 1
-#define DBG_USART USART1
-#define DBG_USART_enable()    do { RCC->APB2ENR |= RCC_APB2ENR_USART1EN; } while (0)
-#define DBG_USART_disable()   do { RCC->APB2ENR &= ~RCC_APB2ENR_USART1EN; } while (0)
-#elif BRD_DBG_UART == 2
-#define DBG_USART USART2
-#define DBG_USART_enable()    do { RCC->APB1ENR |= RCC_APB1ENR_USART2EN; } while (0)
-#define DBG_USART_disable()   do { RCC->APB1ENR &= ~RCC_APB1ENR_USART2EN; } while (0)
-#elif BRD_DBG_UART == 4
-#define DBG_USART USART4
-#define DBG_USART_enable()    do { RCC->APB1ENR |= RCC_APB1ENR_USART4EN; } while (0)
-#define DBG_USART_disable()   do { RCC->APB1ENR &= ~RCC_APB1ENR_USART4EN; } while (0)
-#endif
-#define DBG_USART_WRITE(c)    do { DBG_USART->TDR = (c); } while (0)
-#define DBG_USART_BUSY()      ((DBG_USART->ISR & USART_ISR_TXE) == 0)
-#define DBG_USART_TXING()     ((DBG_USART->ISR & USART_ISR_TC) == 0)
-
 static void debug_init (void) {
-    // configure USART (115200/8N1, tx-only)
-    DBG_USART_enable();
-    DBG_USART->BRR = 16; // 2000000 baud (APB1 clock @32MHz)
-    DBG_USART->CR1 = USART_CR1_UE | USART_CR1_TE; // usart + transmitter enable
-    DBG_USART_disable();
+    // configure USART (2000000/8N1, tx-only)
+    usart_start(BRD_DBG_UART, 2000000);
 #if CFG_DEBUG != 0
     debug_str("\r\n============== DEBUG STARTED ==============\r\n");
 #endif
 }
 
 void hal_debug_str (const char* str) {
-    DBG_USART_enable();
-    CFG_PIN_AF(GPIO_DBG_TX, GPIOCFG_OSPEED_40MHz | GPIOCFG_OTYPE_PUPD | GPIOCFG_PUPD_NONE);
-    char c;
-    while( (c = *str++) ) {
-        while( DBG_USART_BUSY() );
-        DBG_USART_WRITE(c);
-    }
-    while( DBG_USART_TXING() );
-    CFG_PIN(GPIO_DBG_TX, GPIOCFG_MODE_INP | GPIOCFG_OSPEED_400kHz | GPIOCFG_OTYPE_OPEN | GPIOCFG_PUPD_PUP);
-    DBG_USART_disable();
+    usart_str(BRD_DBG_UART, str);
 }
 
 void hal_debug_led (int val) {

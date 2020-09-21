@@ -60,8 +60,6 @@ typedef struct {
 // Personalization data
 #define HAL_PERSODATA_BASE PERSODATA_BASE
 
-void usart_irq (void);
-
 void i2c_irq (void);
 
 #if defined(SVC_fuota)
