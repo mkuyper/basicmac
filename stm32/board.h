@@ -29,9 +29,7 @@
 #define BRD_GPIO_EXT_PULLDN             (1 << 17)
 #define BRD_GPIO_ACTIVE_LOW             (1 << 18)
 
-// special values for low-power UART
-#define BRD_LPUART(x)                   ((x) | (1 << 8))
-
+// GPIO ports
 #define PORT_A  0
 #define PORT_B  1
 #define PORT_C  2
@@ -47,6 +45,7 @@
 #define BRD_USART2                      (1 << 1)
 #define BRD_LPUART1                     (1 << 2)
 
+// UART ports
 #define BRD_USART1_PORT                 usart_port_u1
 #define BRD_USART2_PORT                 usart_port_u2
 #define BRD_LPUART1_PORT                usart_port_lpu1
