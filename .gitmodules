@@ -1,6 +1,6 @@
 [submodule "basicloader"]
 	path = basicloader
-	url = ../basicloader.git
+	url = https://github.com/mkuyper/basicloader.git
 [submodule "services/fuota/micro-ecc"]
 	path = services/micro-ecc
 	url = https://github.com/kmackay/micro-ecc.git
