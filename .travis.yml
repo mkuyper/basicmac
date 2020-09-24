@@ -1,17 +1,23 @@
 language: minimal
 
-services: docker
+dist: focal
 
-env: Dimg=lorabasics/basicmac-test; Dname=basicmac-test
+python: 3.8
+
+addons:
+    apt:
+        packages:
+        - gcc-arm-none-eabi
+        - libnewlib-arm-none-eabi
+        - python3-pip
 
 before_install:
-- sudo chown -R 1000:1000 $TRAVIS_BUILD_DIR
-- docker run -d --name $Dname -v $TRAVIS_BUILD_DIR:/home/nonprivuser/travis -w /home/nonprivuser/travis $Dimg tail -f /dev/null
-- export Dcmd="docker exec -t $Dname bash -c"
 
 install:
-# nothing to install
+- pip3 install -r basicloader/requirements.txt
+- pip3 install -r requirements.txt
+
+before_script:
 
 script:
-# all commands must be quoted
-- $Dcmd "make -C basicloader && cd projects/ex-join && make && VARIANT=simul make test"
+- make -C basicloader && cd projects/ex-join && make && VARIANT=simul make test

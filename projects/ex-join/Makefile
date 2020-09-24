@@ -36,36 +36,10 @@ LMICCFG += extapi
 include ../projects.gmk
 
 ifeq (simul,$(VARIANT))
-test: build-$(VARIANT)/$(PROJECT).hex
-	PYTHONPATH=$${PYTHONPATH}:$(TOPDIR)/tools/pylora:$(TOPDIR)/unicorn/simul \
-		   $(TOPDIR)/unicorn/simul/lwtest.py \
-		   -r EU868 \
-		   -v -d -t \
-		   $(TESTOPTS) \
-		   $(BL)/build/boards/$(BL_BRD)/bootloader.hex \
-		   $<
-
-apptest: build-$(VARIANT)/$(PROJECT).hex
-	PYTHONPATH=$${PYTHONPATH}:$(TOPDIR)/tools/pylora:$(TOPDIR)/unicorn/simul \
-		   ./test.py \
-		   -r EU868 \
-		   -v -d -t \
-		   $(TESTOPTS) \
-		   $(BL)/build/boards/$(BL_BRD)/bootloader.hex \
-		   $<
-
-test.up: build-$(VARIANT)/$(PROJECT).zfw
-	$(ZFWTOOL) mkupdate $< $@
-
-fuotatest: build-$(VARIANT)/$(PROJECT).hex
-	PYTHONPATH=$${PYTHONPATH}:$(TOPDIR)/tools/pylora:$(TOPDIR)/unicorn/simul:$(TOPDIR)/basicloader/tools/fwtool \
-		   ZFWFILE=$(<:.hex=.zfw) \
-		   $(TOPDIR)/services/fuota/test.py \
-		   -r EU868 \
-		   -v -d -t \
-		   $(TESTOPTS) \
-		   $(BL)/build/boards/$(BL_BRD)/bootloader.hex \
-		   $<
+test: build-$(VARIANT)/$(PROJECT).hex $(BL_BUILD)/bootloader.hex
+	PYTHONPATH=$${PYTHONPATH}:$(TOPDIR)/unicorn/simul \
+		   TEST_HEXFILES='$^' \
+		   ward $(WARDOPTS)
 endif
 
 

@@ -37,13 +37,12 @@ enum {
     USART_ERROR = -1,
 };
 
-typedef int (*usart_rx_func) (int ch, void* arg);
-typedef int (*usart_tx_func) (int status, void* arg);
-void usart_start (unsigned int br);
-void usart_stop (void);
-void usart_send (void* src, int n, osjob_t* job, osjobcb_t cb);
-void usart_recv (void* dst, int* n, ostime_t timeout, osjob_t* job, osjobcb_t cb);
-void usart_abort_recv (void);
+void usart_start (const void* port, unsigned int br);
+void usart_stop (const void* port);
+void usart_send (const void* port, void* src, int n, osjob_t* job, osjobcb_t cb);
+void usart_recv (const void* port, void* dst, int* n, ostime_t timeout, osjob_t* job, osjobcb_t cb);
+void usart_abort_recv (const void* port);
+void usart_str (const void* port, const char* str);
 
 #endif
 

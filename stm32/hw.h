@@ -213,21 +213,27 @@ int gpio_transition (int port, int pin, int type, int duration, unsigned int con
 #define PERIPH_I2C
 
 
-// ------------------------------------------------
+//////////////////////////////////////////////////////////////////////
 // USART
+//////////////////////////////////////////////////////////////////////
 
-#ifdef BRD_USART
+#if defined(BRD_USART)
+
+#if BRD_USART_EN(BRD_USART1)
+void usart1_irq (void);
+extern const void* const usart_port_u1;
+#endif
+#if BRD_USART_EN(BRD_USART2)
+void usart2_irq (void);
+extern const void* const usart_port_u2;
+#endif
+#if BRD_USART_EN(BRD_LPUART1)
+void lpuart1_irq (void);
+extern const void* const usart_port_lpu1;
+#endif
 
 #define PERIPH_USART
 #define HW_DMA
-
-#if (BRD_USART & BRD_LPUART(0)) == 0
-#define USART_BR_9600	0xd05
-#define USART_BR_115200	0x116
-#else
-#define USART_BR_9600	0xd0555
-#define USART_BR_115200	0x115c7
-#endif
 
 #endif
 
@@ -371,12 +377,15 @@ enum {
     DMA_USART5  = 13,
     DMA_I2C3    = 14,
     DMA_TIM7    = 15,
+
+    DMA_NONE    = 255,
 };
 enum {
     DMA_CB_HALF     = (1 << 0),
     DMA_CB_COMPLETE = (1 << 1),
 };
-void dma_config (unsigned int ch, unsigned int peripheral, unsigned int ccr, unsigned int flags, void (*callback) (int));
+typedef void (*dma_cb) (int status, void* arg);
+void dma_config (unsigned int ch, unsigned int peripheral, unsigned int ccr, unsigned int flags, dma_cb callback, void* arg);
 int dma_deconfig (unsigned int ch);
 void dma_transfer (unsigned int ch, volatile void* paddr, void* maddr, int n);
 

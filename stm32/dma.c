@@ -10,7 +10,8 @@
 static struct {
     unsigned int active;
     struct {
-        void (*callback) (int);
+        dma_cb callback;
+        void* arg;
     } chan[7];
 } dma;
 
@@ -77,8 +78,9 @@ static void dma_off (unsigned int ch) {
 
 #define DMACHAN(ch) ((DMA_Channel_TypeDef*)(DMA1_Channel1_BASE + (ch) * (DMA1_Channel2_BASE-DMA1_Channel1_BASE)))
 
-void dma_config (unsigned int ch, unsigned int peripheral, unsigned int ccr, unsigned int flags, void (*callback) (int)) {
+void dma_config (unsigned int ch, unsigned int peripheral, unsigned int ccr, unsigned int flags, dma_cb callback, void* arg) {
     dma.chan[ch].callback = callback;
+    dma.chan[ch].arg = arg;
     dma_on(ch);
     DMACHAN(ch)->CCR = ccr;
     DMA1_CSELR->CSELR = (DMA1_CSELR->CSELR & ~(0xf << (ch<<2))) | (peripheral << (ch<<2));
@@ -112,11 +114,11 @@ void dma_irq (void) {
         unsigned int ccr = DMACHAN(ch)->CCR;
         if( (ccr & DMA_CCR_TCIE) && (isr & (DMA_ISR_TCIF1 << (ch<<2))) ) {
             DMA1->IFCR = DMA_IFCR_CTCIF1 << (ch<<2);
-            dma.chan[ch].callback(DMA_CB_COMPLETE);
+            dma.chan[ch].callback(DMA_CB_COMPLETE, dma.chan[ch].arg);
         }
         if( (ccr & DMA_CCR_HTIE) && (isr & (DMA_ISR_HTIF1 << (ch<<2))) ) {
             DMA1->IFCR = DMA_IFCR_CHTIF1 << (ch<<2);
-            dma.chan[ch].callback(DMA_CB_HALF);
+            dma.chan[ch].callback(DMA_CB_HALF, dma.chan[ch].arg);
         }
     }
 }
