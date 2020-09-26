@@ -16,6 +16,8 @@
 #define BRD_GPIO_ACTIVE_LOW     (1 << 8)
 
 
+// Allocated GPIOs
+#define GPIO_PERSO_DET          24
 
 
 #endif

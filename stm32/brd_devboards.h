@@ -70,6 +70,10 @@
 //#define GPIO_DBG_LED  BRD_GPIO(PORT_A, 5) // -- LED is shared with SCK!!
 #define BRD_DBG_UART    BRD_USART2_PORT
 
+// Personalization UART
+#define BRD_PERSO_UART  BRD_USART2_PORT
+#define GPIO_PERSO_DET  GPIO_USART2_RX
+
 // power consumption
 
 #ifndef BRD_PWR_RUN_UA
@@ -137,6 +141,10 @@
 // Debug LED / USART
 #define GPIO_DBG_LED    GPIO_LED4
 #define BRD_DBG_UART    BRD_USART2_PORT
+
+// Personalization UART
+#define BRD_PERSO_UART  BRD_USART2_PORT
+#define GPIO_PERSO_DET  GPIO_USART2_RX
 
 // power consumption
 
