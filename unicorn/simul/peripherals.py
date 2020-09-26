@@ -138,6 +138,21 @@ class Timer(Peripheral, Clock):
 
 
 # -----------------------------------------------------------------------------
+# Peripheral: GPIO
+
+@Peripherals.add
+class GPIO(Peripheral):
+    uuid = UUID('76d5885a-ff99-11ea-9aa3-cd4b514dc224')
+
+    @Peripherals.register
+    class GPIORegister(ctypes.LittleEndianStructure):
+        _fields_ = [(r, ctypes.c_uint32) for r in ('value', 'output', 'direction', 'pull', 'updown')]
+
+    def init(self) -> None:
+        self.reg = GPIO.GPIORegister()
+        self.sim.map_peripheral(self.pid, self.reg)
+
+# -----------------------------------------------------------------------------
 # Peripheral: Radio
 
 @Peripherals.add

@@ -117,6 +117,69 @@ void timer_set (uint64_t target) {
 
 
 // -----------------------------------------------------------------------------
+// 76d5885a-ff99-11ea-9aa3-cd4b514dc224
+//
+// GPIO
+
+typedef struct {
+    uint32_t value;     // 0=lo 1=hi
+    uint32_t output;    // 0=lo 1=hi
+    uint32_t direction; // 0=in 1=out
+    uint32_t pull;      // 0=no 1=yes
+    uint32_t updown;    // 0=dn 1=up
+} gpio_reg;
+
+static void gpio_irq (void) {
+
+}
+
+void gpio_init (void) {
+    static const unsigned char uuid[16] = {
+        0x76, 0xd5, 0x88, 0x5a, 0xff, 0x99, 0x11, 0xea, 0x9a, 0xa3, 0xcd, 0x4b, 0x51, 0x4d, 0xc2, 0x24
+    };
+    preg(HAL_PID_GPIO, uuid);
+    nvic_sethandler(HAL_PID_GPIO, gpio_irq);
+}
+
+void pio_set (unsigned int pin, int value) {
+    gpio_reg* reg = PERIPH_REG(HAL_PID_GPIO);
+    uint32_t mask = BRD_PIN(pin);
+    if (value < 0) {
+        reg->direction &= ~mask;
+        if( (value & 1) == 0 ) { // pull-up
+            reg->pull |= mask;
+            reg->updown |= mask;
+        } else if( (value & 2) == 0 ) { // pull-dn
+            reg->pull |= mask;
+            reg->updown &= ~mask;
+        } else { // no pull
+            reg->pull &= ~mask;
+        }
+    } else {
+        reg->direction |= mask;
+        if( value ) {
+            reg->value &= ~mask;
+        } else {
+            reg->value |= mask;
+        }
+    }
+}
+
+void pio_activate (unsigned int pin, bool active) {
+    pio_set(pin, (pin & BRD_GPIO_ACTIVE_LOW) ? !active : active);
+}
+
+int pio_get (unsigned int pin) {
+    gpio_reg* reg = PERIPH_REG(HAL_PID_GPIO);
+    uint32_t mask = BRD_PIN(pin);
+    return reg->value & mask;
+}
+
+void pio_default (unsigned int pin) {
+    pio_set(pin, PIO_INP_HIZ);
+}
+
+// -----------------------------------------------------------------------------
 // 3888937c-ab4c-11ea-aeed-27009b59e638
 //
 // Radio

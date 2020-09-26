@@ -63,6 +63,11 @@ void pio_set (unsigned int pin, int value);
 int pio_get (unsigned int pin);
 void pio_activate (unsigned int pin, bool active);
 
+uint32_t pio_irq_get (void);
+void pio_irq_clear (uint32_t mask);
+void pio_irq_enable (unsigned int gpio, bool enable);
+void pio_irq_config (unsigned int pin, bool rising, bool falling);
+
 #endif
 
 

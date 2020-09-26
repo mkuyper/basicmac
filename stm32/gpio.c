@@ -1,9 +1,10 @@
+// Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
 // Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 //
 // This file is subject to the terms and conditions defined in file 'LICENSE',
 // which is part of this source code package.
 
-#include "hw.h"
+#include "lmic.h"
 
 static inline void gpio_begin (int port) {
     unsigned int enr = GPIO_RCC_ENR;
@@ -119,6 +120,14 @@ void pio_set (unsigned int pin, int value) {
     }
 }
 
+void pio_activate (unsigned int pin, bool active) {
+    pio_set(pin, (pin & BRD_GPIO_ACTIVE_LOW) ? !active : active);
+}
+
 int pio_get (unsigned int pin) {
     return gpio_get_pin(BRD_PORT(pin), BRD_PIN(pin));
+}
+
+void pio_default (unsigned int pin) {
+    pio_set(pin, PIO_INP_ANA);
 }
