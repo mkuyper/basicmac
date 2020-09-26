@@ -76,7 +76,7 @@ make the packet length a multiple of four.
 
 Finally, a CRC-32 is calculated over the header (CMD/RES, TAG, LEN), the
 payload (if any), and the padding bytes (if any); this value is then appended
-to the packet.
+to the packet using little-endian byte order.
 
 The receiver shall silently drop any packet with a CRC-32 that does not verify,
 carrying an unexpected message tag, or that is otherwise malformed.
@@ -164,11 +164,11 @@ Device -> Host: |00| tag |00|
 #### `0x90` Read EEPROM Data
 ```
                 +--+--+--+--+--+--+--+
-Host -> Device: |04| tag |ln| off |nb|
+Host -> Device: |04| tag |03| off |nb|
                 +--+--+--+--+--+--+--+
 
                 +--+--+--+--+---  -  -  ---+
-Host -> Device: |00| tag |ln|     data     |
+Host -> Device: |00| tag |nb|     data     |
                 +--+--+--+--+---  -  -  ---+
 ```
 **Description:** This command reads *nb* bytes of data from EEPROM at offset *off*.
@@ -180,10 +180,10 @@ Host -> Device: |00| tag |ln|     data     |
 Host -> Device: |04| tag |ln| off |     data     |
                 +--+--+--+--+--+--+---  -  -  ---+
 
-                +--+--+--+--+---  -  -  ---+
-Host -> Device: |00| tag |ln|     data     |
-                +--+--+--+--+---  -  -  ---+
+                +--+--+--+--+
+Host -> Device: |00| tag |00|
+                +--+--+--+--+
 ```
-**Description:** This command writes *data* to EEPROM at offset *off*.
+**Description:** This command writes *data* (*ln*-2 bytes) to EEPROM at offset *off*.
 
 [COBS]: https://en.wikipedia.org/wiki/Consistent_Overhead_Byte_Stuffing
