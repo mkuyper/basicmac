@@ -168,7 +168,7 @@ Host -> Device: |04| tag |03| off |nb|
                 +--+--+--+--+--+--+--+
 
                 +--+--+--+--+---  -  -  ---+
-Host -> Device: |00| tag |nb|     data     |
+Device -> Host: |00| tag |nb|     data     |
                 +--+--+--+--+---  -  -  ---+
 ```
 **Description:** This command reads *nb* bytes of data from EEPROM at offset *off*.
@@ -181,7 +181,7 @@ Host -> Device: |04| tag |ln| off |     data     |
                 +--+--+--+--+--+--+---  -  -  ---+
 
                 +--+--+--+--+
-Host -> Device: |00| tag |00|
+Device -> Host: |00| tag |00|
                 +--+--+--+--+
 ```
 **Description:** This command writes *data* (*ln*-2 bytes) to EEPROM at offset *off*.
