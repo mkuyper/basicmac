@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+# Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
 # Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 #
 # This file is subject to the terms and conditions defined in file 'LICENSE',
@@ -13,11 +14,13 @@ import yaml
 
 from collections import deque, OrderedDict
 
-from typing import Callable,Dict,List,Optional,Set,TextIO,Tuple
+from typing import Any,Callable,Dict,List,Optional,Set,TextIO,Tuple,Union
 from typing import cast
 from argparse import Namespace as NS # type alias
 
 from cc import CommandCollection
+
+HookDef = Tuple[int,str]
 
 class Service:
     class Hook:
@@ -42,7 +45,8 @@ class Service:
             else:
                 raise ValueError('%s: invalid function declaration "%s"' % (fn, hd))
 
-        def emit(self, fh:TextIO, hooks:List[str]) -> None:
+        def emit(self, fh:TextIO, hookdefs:List[HookDef]) -> None:
+            hooks = [h for p, h in sorted(hookdefs)]
             for h in hooks:
                 fh.write(f'extern {self.template % h};\n')
             if self.style == self.STYLE_ALL:
@@ -71,13 +75,15 @@ class Service:
     def __init__(self, svcid:str, fn:str) -> None:
         self.id = svcid
         self.srcs     : List[str]                      = []
-        self.hooks    : List[List[str]]                = []
-        self.hookdefs : Dict[str,List[str]]            = OrderedDict()
+        self.hooks    : List[Service.Hook]             = []
+        self.hookdefs : Dict[str,List[HookDef]]        = OrderedDict()
         self.require  : List[str]                      = []
         self.defines  : List[Tuple[str,Optional[str]]] = []
         self.fn = fn
         with open(fn, 'r') as fh:
             d = yaml.safe_load(fh)
+        k:str
+        v:Union[List[str],str]
         for k, v in d.items():
             if k == 'src':
                 if isinstance(v, list):
@@ -97,12 +103,16 @@ class Service:
                     v = [ v ]
                 self.defines.extend([Service.parse_define(d, fn) for d in v])
             elif k.startswith('hook.'):
+                def priohook(s:str) -> HookDef:
+                    h, _, n = s.partition(':')
+                    p = int(n) if n else 0
+                    return p, h
                 h = k[5:]
                 if h not in self.hookdefs:
                     self.hookdefs[h] = []
                 if not isinstance(v, list):
                     v = [ v ]
-                self.hookdefs[h].extend(v)
+                self.hookdefs[h].extend([priohook(s) for s in v])
             else:
                 raise ValueError('%s: unknown key %s' % (fn, k))
 
@@ -135,7 +145,7 @@ class ServiceCollection:
                 '%s%s' % (k, '' if v is None else '=%s' % shlex.quote(v))
                 for svc in self.svcs.values() for k,v in svc.defines]
 
-    def hookdefs(self) -> Dict[Service.Hook,List[str]]:
+    def hookdefs(self) -> Dict[Service.Hook,List[HookDef]]:
         return { h: [hd for hds in (sv2.hookdefs.get(h.name)
             for sv2 in self.svcs.values()) if hds is not None for hd in hds]
             for sv1 in self.svcs.values() for h in sv1.hooks }
@@ -148,7 +158,7 @@ class ServiceCollection:
 
 class ServiceToolUtil:
     @staticmethod
-    def arg(name:str) -> Callable:
+    def arg(name:str) -> Callable[...,Any]:
         if name == 'svc':
             return CommandCollection.arg(name, type=str,
                     metavar='svcid',
@@ -158,12 +168,6 @@ class ServiceToolUtil:
                     action='append',
                     help='paths to search for service definitions')
         raise ValueError()
-
-    @staticmethod
-    def hook_default(hook, defs) -> None:
-        print(f'hook: {hook}')
-        print(f'defs: {defs}')
-
 
 class ServiceTool:
     def run(self) -> None:
