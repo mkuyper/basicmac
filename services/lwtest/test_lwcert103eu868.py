@@ -246,7 +246,7 @@ async def _(dut=createtest):
         # wait until message is received on channel 1 AND
         # simultaneously ensure that the DlChannelAns is being
         # repeated while no DL is received
-        for i in range(20):
+        for i in range(32):
             m = await dut.updf()
             opts = m.unpack_opts()
             assert len(opts) == 1, f'i={i}, f={f}'
