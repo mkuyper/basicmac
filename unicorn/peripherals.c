@@ -144,7 +144,7 @@ void gpio_init (void) {
 void pio_set (unsigned int pin, int value) {
     gpio_reg* reg = PERIPH_REG(HAL_PID_GPIO);
     uint32_t mask = BRD_PIN(pin);
-    if (value < 0) {
+    if (value < 0) { // input
         reg->direction &= ~mask;
         if( (value & 1) == 0 ) { // pull-up
             reg->pull |= mask;
@@ -155,14 +155,15 @@ void pio_set (unsigned int pin, int value) {
         } else { // no pull
             reg->pull &= ~mask;
         }
-    } else {
+    } else { // output
         reg->direction |= mask;
         if( value ) {
-            reg->value &= ~mask;
+            reg->output &= ~mask;
         } else {
-            reg->value |= mask;
+            reg->output |= mask;
         }
     }
+    // TODO: service
 }
 
 void pio_activate (unsigned int pin, bool active) {
@@ -175,9 +176,72 @@ int pio_get (unsigned int pin) {
     return reg->value & mask;
 }
 
+bool pio_active (unsigned int pin) {
+    bool v = pio_get(pin);
+    if( (pin & BRD_GPIO_ACTIVE_LOW) ) {
+        v = !v;
+    }
+    return v;
+}
+
 void pio_default (unsigned int pin) {
     pio_set(pin, PIO_INP_HIZ);
 }
+
+
+// -----------------------------------------------------------------------------
+// a806819e-0134-11eb-a845-f739a072dd5c
+//
+// Fast UART
+
+typedef struct {
+    uint8_t txbuf[1024];
+    uint8_t rxbuf[1024];
+    uint32_t ctrl;
+    uint32_t rxlen;
+    uint32_t txlen;
+} fuart_reg;
+
+enum {
+    FUART_PSVC_SEND,
+    FUART_PSVC_CLEARIRQ,
+};
+
+enum {
+    FUART_C_RXEN = (1 << 0),
+};
+
+static void fuart_irq (void) {
+    fuart_reg* reg = PERIPH_REG(HAL_PID_FUART);
+    fuart_rx_cb(reg->rxbuf, reg->rxlen);
+    reg->ctrl &= ~FUART_C_RXEN;
+}
+
+void fuart_init (void) {
+    static const unsigned char uuid[16] = {
+        0xa8, 0x06, 0x81, 0x9e, 0x01, 0x34, 0x11, 0xeb, 0xa8, 0x45, 0xf7, 0x39, 0xa0, 0x72, 0xdd, 0x5c
+    };
+    preg(HAL_PID_FUART, uuid);
+    nvic_sethandler(HAL_PID_FUART, fuart_irq);
+}
+
+void fuart_tx (unsigned char* buf, int n) {
+    fuart_reg* reg = PERIPH_REG(HAL_PID_FUART);
+    ASSERT(n <= sizeof(reg->txbuf));
+    memcpy(reg->txbuf, buf, n);
+    psvc(HAL_PID_FUART, FUART_PSVC_SEND);
+}
+
+void fuart_rx_start (void) {
+    fuart_reg* reg = PERIPH_REG(HAL_PID_FUART);
+    reg->ctrl |= FUART_C_RXEN;
+}
+
+void fuart_rx_stop (void) {
+    fuart_reg* reg = PERIPH_REG(HAL_PID_FUART);
+    reg->ctrl &= ~FUART_C_RXEN;
+}
+
 
 // -----------------------------------------------------------------------------
 // 3888937c-ab4c-11ea-aeed-27009b59e638

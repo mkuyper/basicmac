@@ -18,6 +18,7 @@ enum {
     HAL_PID_DEBUG,
     HAL_PID_TIMER,
     HAL_PID_GPIO,
+    HAL_PID_FUART,
     HAL_PID_RADIO,
 
     HAL_PID_COUNT
@@ -36,6 +37,12 @@ void timer_set (uint64_t target);
 void radio_halinit (void);
 
 void gpio_init (void);
+
+void fuart_init (void);
+void fuart_tx (unsigned char* buf, int n);
+void fuart_rx_start (void);
+void fuart_rx_cb (unsigned char* buf, int n);
+void fuart_rx_stop (void);
 
 
 // Personalization data

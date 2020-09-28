@@ -4,7 +4,7 @@
 # This file is subject to the terms and conditions defined in file 'LICENSE',
 # which is part of this source code package.
 
-from typing import cast, Any, Callable, Dict, List, Optional, Tuple, Type
+from typing import cast, Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar
 
 import asyncio
 import ctypes
@@ -37,6 +37,8 @@ class Peripheral:
     def svc(self, fid:int) -> None:
         raise NotImplementedError
 
+
+T = TypeVar('T', bound=Peripheral)
 
 class Peripherals:
     peripherals:Dict[UUID,Type[Peripheral]] = {}
@@ -137,6 +139,12 @@ class Simulation():
     def map_peripheral(self, pid:int, regs:'ctypes._CData') -> None:
         self.emu.mem_map_ptr(Simulation.PERIPH_BASE + (pid * 0x1000),
                 ctypes.sizeof(regs), uc.UC_PROT_ALL, ctypes.byref(regs))
+
+    def get_peripheral(self, ptype:Type[T]) -> T:
+        for p in self.peripherals.values():
+            if p.uuid == ptype.uuid:
+                return p
+        raise ValueError(f'Unregistered peripheral {ptype.uuid}')
 
     def log(self, msg:str) -> None:
         if self.evhub:

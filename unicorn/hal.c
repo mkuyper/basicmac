@@ -42,6 +42,7 @@ void hal_init (void* bootarg) {
     dbg_init();
     timer_init();
     gpio_init();
+    fuart_init();
     radio_halinit();
 
     // TODO: RNG

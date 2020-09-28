@@ -152,6 +152,56 @@ class GPIO(Peripheral):
         self.reg = GPIO.GPIORegister()
         self.sim.map_peripheral(self.pid, self.reg)
 
+
+# -----------------------------------------------------------------------------
+# Peripheral: Fast UART
+
+@Peripherals.add
+class FastUART(Peripheral):
+    uuid = UUID('a806819e-0134-11eb-a845-f739a072dd5c')
+
+    C_RXEN = (1 << 0)
+
+    @Peripherals.register
+    class FastUARTRegister(ctypes.LittleEndianStructure):
+        _fields_ = [*[(r, ctypes.c_ubyte*1024) for r in ('txbuf', 'rxbuf')], *[(r, ctypes.c_uint32) for r in ('ctrl', 'rxlen', 'txlen')]]
+
+    def init(self) -> None:
+        self.reg = FastUART.FastUARTRegister()
+        self.sim.map_peripheral(self.pid, self.reg)
+        self.event = asyncio.Event()
+
+    # receive from device
+    async def recv(self, timeout:float) -> Optional[bytes]:
+        self.event.clear()
+        try:
+            await asyncio.wait_for(self.event.wait(), timeout=timeout)
+        except asyncio.TimeoutError:
+            return None
+        return bytes(self.reg.txbuf[:self.reg.txlen])
+
+    # send to device
+    def send(self, data:bytes) -> None:
+        if self.reg.status & FastUART.C_RXEN:
+            self.reg.rxbuf[:len(data)] = data
+            self.reg.rxlen = len(data)
+            self.sim.irqhandler.set(self.pid)
+
+    def svc_send(self) -> None:
+        self.event.set()
+
+    def svc_clearirq(self) -> None:
+        self.sim.irqhandler.clear(self.pid)
+
+    svc_lookup = {
+            0: svc_send,
+            1: svc_clearirq,
+            }
+
+    def svc(self, fid:int) -> None:
+        FastUART.svc_lookup[fid](self)
+
+
 # -----------------------------------------------------------------------------
 # Peripheral: Radio
 
