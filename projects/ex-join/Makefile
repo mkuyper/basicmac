@@ -6,7 +6,8 @@ TARGET := b_l072z_lrwan1
 #TARGET := nucleo_l053r8-sx1261mbed
 #TARGET := nucleo_l053r8-sx1262mbed
 
-VARIANTS := eu868 us915 hybrid simul
+#VARIANTS := eu868 us915 hybrid simul
+VARIANTS := us915
 
 REGIONS.simul := eu868
 TARGET.simul := unicorn

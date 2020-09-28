@@ -114,6 +114,8 @@
 #define GPIO_LED3       BRD_GPIO(PORT_B, 6) // blu
 #define GPIO_LED4       BRD_GPIO(PORT_B, 7) // red
 
+#define GPIO_BUTTON     BRD_GPIO_EX(PORT_B, 2, BRD_GPIO_ACTIVE_LOW)
+
 // button PB2
 
 #define BRD_sx1276_radio
@@ -135,6 +137,7 @@
 #define GPIO_USART1_RX  BRD_GPIO_AF(PORT_A, 10, 4)
 
 // USART2
+#define BRD_USART2_DMA  BRD_DMA_CHANS(4,5)
 #define GPIO_USART2_TX  BRD_GPIO_AF(PORT_A, 2, 4)
 #define GPIO_USART2_RX  BRD_GPIO_AF(PORT_A, 3, 4)
 
@@ -143,8 +146,10 @@
 #define BRD_DBG_UART    BRD_USART2_PORT
 
 // Personalization UART
-#define BRD_PERSO_UART  BRD_USART2_PORT
-#define GPIO_PERSO_DET  GPIO_USART2_RX
+//#define BRD_PERSO_UART  BRD_USART2_PORT
+//#define GPIO_PERSO_DET  GPIO_BUTTON
+#define BRD_PERSO_UART  BRD_USART1_PORT
+#define GPIO_PERSO_DET  GPIO_USART1_RX
 
 // power consumption
 

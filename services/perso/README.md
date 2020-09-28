@@ -21,13 +21,15 @@ be used:
 - Flow control: none
 
 After reset, the device checks for presence of personalization/test equipment
-(PTE) by checking the state of a designated I/O line. If this line is driven
-high by a PTE, the test and personalization mode is activated; otherwise the
-device will resume normal operation.
+(PTE) by checking the state of a designated I/O line. If this line is driven —
+high or low, depending on configuration — by a PTE, the test and
+personalization mode is activated; otherwise the device will resume normal
+operation.
 
 > **Note:** It is recommended to use the UART RX line as the designated I/O
-> line. Since the idle state of a UART line is logic high, a PTE is easily
-> detected whenever a serial transceiver is connected to the device.
+> line in active-high mode. Since the idle state of a UART line is logic high,
+> a PTE is easily detected whenever a serial transceiver is connected to the
+> device.
 
 
 ## Data Link Layer
