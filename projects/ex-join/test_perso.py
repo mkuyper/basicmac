@@ -22,5 +22,6 @@ async def createtest(_=vtime):
 async def _(dut=createtest):
     gpio = dut.sim.get_peripheral(GPIO)
     uart = dut.sim.get_peripheral(FastUART)
+    gpio.drive(24, True)
     await asyncio.sleep(10)
 

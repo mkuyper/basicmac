@@ -123,14 +123,17 @@ void timer_set (uint64_t target) {
 
 typedef struct {
     uint32_t value;     // 0=lo 1=hi
-    uint32_t output;    // 0=lo 1=hi
-    uint32_t direction; // 0=in 1=out
-    uint32_t pull;      // 0=no 1=yes
-    uint32_t updown;    // 0=dn 1=up
+    uint32_t outm;      // 0=in 1=out
+    uint32_t outv;      // 0=lo 1=hi
+    uint32_t pdn;       // 0=no 1=yes
+    uint32_t pup;       // 0=no 1=yes
+    uint32_t rise;      // rising edge irq
+    uint32_t fall;      // falling edge irq
+    uint32_t irq;       // pending irq
 } gpio_reg;
 
 static void gpio_irq (void) {
-
+    // TODO - implement
 }
 
 void gpio_init (void) {
@@ -143,27 +146,37 @@ void gpio_init (void) {
 
 void pio_set (unsigned int pin, int value) {
     gpio_reg* reg = PERIPH_REG(HAL_PID_GPIO);
-    uint32_t mask = BRD_PIN(pin);
-    if (value < 0) { // input
-        reg->direction &= ~mask;
-        if( (value & 1) == 0 ) { // pull-up
-            reg->pull |= mask;
-            reg->updown |= mask;
-        } else if( (value & 2) == 0 ) { // pull-dn
-            reg->pull |= mask;
-            reg->updown &= ~mask;
-        } else { // no pull
-            reg->pull &= ~mask;
+    uint32_t mask = 1 << BRD_PIN(pin);
+
+    if( value < 0 ) { // input
+        // auto-pull
+        if( value == PIO_INP_PAU ) {
+            if( pin & BRD_GPIO_ACTIVE_LOW ) {
+                value = PIO_INP_PUP;
+            } else {
+                value = PIO_INP_PDN;
+            }
         }
-    } else { // output
-        reg->direction |= mask;
-        if( value ) {
-            reg->output &= ~mask;
+        if( value == PIO_INP_PUP ) {
+            reg->pup |= mask;
+            reg->pdn &= ~mask;
+        } else if( value == PIO_INP_PDN ) {
+            reg->pup &= ~mask;
+            reg->pdn |= mask;
         } else {
-            reg->output |= mask;
+            reg->pup &= ~mask;
+            reg->pdn &= ~mask;
+        }
+        reg->outm &= ~mask;
+    } else { // output
+        reg->outm |= mask;
+        if( value ) {
+            reg->outv &= ~mask;
+        } else {
+            reg->outv |= mask;
         }
     }
-    // TODO: service
+    psvc(HAL_PID_GPIO, 0);
 }
 
 void pio_activate (unsigned int pin, bool active) {
@@ -172,7 +185,7 @@ void pio_activate (unsigned int pin, bool active) {
 
 int pio_get (unsigned int pin) {
     gpio_reg* reg = PERIPH_REG(HAL_PID_GPIO);
-    uint32_t mask = BRD_PIN(pin);
+    uint32_t mask = 1 << BRD_PIN(pin);
     return reg->value & mask;
 }
 

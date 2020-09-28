@@ -7,6 +7,7 @@ from typing import Any, List, Optional, Set
 
 import asyncio
 import ctypes
+import random
 
 from uuid import UUID
 
@@ -146,11 +147,80 @@ class GPIO(Peripheral):
 
     @Peripherals.register
     class GPIORegister(ctypes.LittleEndianStructure):
-        _fields_ = [(r, ctypes.c_uint32) for r in ('value', 'output', 'direction', 'pull', 'updown')]
+        _fields_ = [(r, ctypes.c_uint32) for r in ('value', 'outm', 'outv', 'pdn', 'pup', 'rise', 'fall', 'irq')]
 
     def init(self) -> None:
         self.reg = GPIO.GPIORegister()
         self.sim.map_peripheral(self.pid, self.reg)
+
+        # external interface
+        self.inpm = 0  # connected input
+        self.inpv = 0  # input value
+        self.epup = 0  # external pull-up
+        self.epdn = 0  # external pull-down
+
+        self.watchers:Set[asyncio.Event] = set()
+
+    def extconfig(self, pio:int, *, pullup:bool=False, pulldn:bool=False) -> None:
+        mask = (1 << pio)
+        if pullup:
+            self.epup |= mask
+        else:
+            self.epup &= ~mask
+        if pulldn:
+            self.epdn |= mask
+        else:
+            self.epdn &= ~mask
+        self.update()
+
+    async def waitfor(self, pio:int, lvl:bool) -> None:
+        mask = (1 << pio)
+        if (not not (self.reg.value & mask)) != lvl:
+            ev = asyncio.Event()
+            self.watchers.add(ev)
+            while (not not (self.reg.value & mask)) != lvl:
+                await ev.wait()
+                ev.clear()
+            self.watchers.remove(ev)
+
+    def drive(self, pio:int, value:Optional[bool]) -> None:
+        mask = (1 << pio)
+        if value is None:
+            self.inpm &= ~mask
+        else:
+            if value:
+                self.inpv |= mask
+            else:
+                self.inpv &= ~mask
+            self.inpm |= mask
+        self.update()
+
+    def update(self) -> None:
+        if self.reg.outm & self.inpm:
+            raise RuntimeError(f'GPIO short circuit: {bin(self.reg.outm & self.inpm)}')
+
+        val  = self.reg.pup | self.epup # pull-ups
+        val |= random.getrandbits(32) & (~self.reg.pdn & ~self.epdn) # floaters
+        val &= ~(self.reg.outm | self.inpm) # mask out driven pins
+        val |= self.reg.outm & self.reg.outv # internally driven
+        val |= self.inpm & self.inpv # externally driven
+
+        cval = self.reg.value ^ val
+        self.reg.value = val
+
+        if cval:
+            self.reg.irq |= ((self.reg.rise & cval & val) | (self.reg.fall & cval & ~val))
+            for e in self.watchers:
+                e.set()
+
+        if self.reg.irq:
+            self.sim.irqhandler.set(self.pid)
+        else:
+            self.sim.irqhandler.clear(self.pid)
+
+    def svc(self, fid:int) -> None:
+        assert fid == 0
+        self.update()
 
 
 # -----------------------------------------------------------------------------

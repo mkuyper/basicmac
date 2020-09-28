@@ -63,20 +63,23 @@ void usart_stop (const void* port) { }
 void usart_send (const void* port, void* src, int n, osjob_t* job, osjobcb_t cb) {
     if( port == USART_FUART1 ) {
         fuart_send(src, n, job, cb);
+    } else {
+        ASSERT(0);
     }
-    ASSERT(0);
 }
 void usart_recv (const void* port, void* dst, int* n, ostime_t timeout, ostime_t idle_timeout, osjob_t* job, osjobcb_t cb) {
     if( port == USART_FUART1 ) {
         fuart_recv(dst, n, timeout, job, cb);
+    } else {
+        ASSERT(0);
     }
-    ASSERT(0);
 }
 void usart_abort_recv (const void* port) {
     if( port == USART_FUART1 ) {
         fuart_abort_recv();
+    } else {
+        ASSERT(0);
     }
-    ASSERT(0);
 }
 
 void usart_str (const void* port, const char* str) {

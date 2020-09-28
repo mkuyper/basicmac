@@ -143,7 +143,7 @@ class Simulation():
     def get_peripheral(self, ptype:Type[T]) -> T:
         for p in self.peripherals.values():
             if p.uuid == ptype.uuid:
-                return p
+                return cast(T, p)
         raise ValueError(f'Unregistered peripheral {ptype.uuid}')
 
     def log(self, msg:str) -> None:
