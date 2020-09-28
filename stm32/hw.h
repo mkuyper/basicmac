@@ -388,6 +388,7 @@ typedef void (*dma_cb) (int status, void* arg);
 void dma_config (unsigned int ch, unsigned int peripheral, unsigned int ccr, unsigned int flags, dma_cb callback, void* arg);
 int dma_deconfig (unsigned int ch);
 void dma_transfer (unsigned int ch, volatile void* paddr, void* maddr, int n);
+int dma_remaining (unsigned int ch);
 
 void dma_irq (void);
 

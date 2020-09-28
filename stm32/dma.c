@@ -101,6 +101,10 @@ int dma_deconfig (unsigned int ch) {
     return n;
 }
 
+int dma_remaining (unsigned int ch) {
+    return DMACHAN(ch)->CNDTR;
+}
+
 void dma_transfer (unsigned int ch, volatile void* paddr, void* maddr, int n) {
     DMACHAN(ch)->CPAR = (uint32_t) paddr;
     DMACHAN(ch)->CMAR = (uint32_t) maddr;
