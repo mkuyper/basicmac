@@ -73,12 +73,27 @@ class PTE:
     async def xchg(self, cmd:int, payload:bytes=b'', *, timeout:Optional[float]=None) -> Tuple[int,bytes]:
         return await asyncio.wait_for(self._xchg(cmd, payload), timeout=timeout)
 
+    RES_EPARAM = 0x80
+    RES_INTERR = 0x81
+    RES_WTX    = 0xFE
+    RES_NOIMPL = 0xFF
+
+    @staticmethod
+    def check_res(res:int, expected:Optional[int]=None) -> None:
+        code2desc = {
+                PTE.RES_EPARAM: 'invalid parameter',
+                PTE.RES_INTERR: 'internal error',
+                PTE.RES_NOIMPL: 'not implemented' }
+        if res & 0x80:
+            raise ValueError(f'Error response code 0x{res:02x} ({code2desc.get(res, "unknown")})')
+        if expected is not None and res != expected:
+            raise ValueError(f'Unexpected response code 0x{res:02x}')
+
     NOP = 0x00
 
     async def nop(self, *, timeout:Optional[float]=None) -> None:
         res, pl = await self.xchg(PTE.NOP, timeout=timeout)
-        if res != 0x7f:
-            raise ValueError(f'Unexpected response code 0x{res:02x}')
+        PTE.check_res(res, expected=0x7F)
         if pl:
             raise ValueError(f'Unexpected response payload {pl.hex()}')
 

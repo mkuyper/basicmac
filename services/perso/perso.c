@@ -15,7 +15,21 @@
 #error "Personalization module requires UART, please define BRD_PERSO_UART"
 #endif
 
+enum {
+    CMD_NOP      = 0x00,
+    CMD_RUN      = 0x01,
+    CMD_RESET    = 0x02,
+
+    CMD_EE_READ  = 0x90,
+    CMD_EE_WRITE = 0x91,
+};
+
 static int process (unsigned char* buf) { // XXX
+    if( buf[0] == CMD_NOP ) {
+        buf[0] = 0x7F;
+        return 0;
+    }
+
     //int len = buf[3];
 
     buf[0] = 0xff;
@@ -91,6 +105,7 @@ static void rx_done (osjob_t* job) {
         if( n >= 8 && (n & 3) == 0 && 8 + ((perso.buf.bytes[3] + 3) & ~3) == n
                 && crc32(perso.buf.words, (n>>2)-1) == perso.buf.words[(n>>2)-1] ) {
 
+            // TODO - dispatch as job
             n = process(perso.buf.bytes);
 
             perso.buf.bytes[3] = n;
