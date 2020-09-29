@@ -7,6 +7,8 @@ import asyncio
 
 from devtest import vtime, DeviceTest
 from peripherals import FastUART, GPIO
+from perso import PTE
+from simperso import FUART_PTESerialPort
 
 from ward import fixture, test
 
@@ -21,7 +23,7 @@ async def createtest(_=vtime):
 @test('Perso')
 async def _(dut=createtest):
     gpio = dut.sim.get_peripheral(GPIO)
-    uart = dut.sim.get_peripheral(FastUART)
+    pte = PTE(FUART_PTESerialPort(dut.sim.get_peripheral(FastUART)))
     gpio.drive(24, True)
-    await asyncio.sleep(10)
-
+    await asyncio.sleep(5)
+    await pte.nop(timeout=5)

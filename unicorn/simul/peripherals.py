@@ -242,7 +242,7 @@ class FastUART(Peripheral):
         self.event = asyncio.Event()
 
     # receive from device
-    async def recv(self, timeout:float) -> Optional[bytes]:
+    async def recv(self, *, timeout:Optional[float]=None) -> Optional[bytes]:
         self.event.clear()
         try:
             await asyncio.wait_for(self.event.wait(), timeout=timeout)
@@ -252,7 +252,7 @@ class FastUART(Peripheral):
 
     # send to device
     def send(self, data:bytes) -> None:
-        if self.reg.status & FastUART.C_RXEN:
+        if self.reg.ctrl & FastUART.C_RXEN:
             self.reg.rxbuf[:len(data)] = data
             self.reg.rxlen = len(data)
             self.sim.irqhandler.set(self.pid)

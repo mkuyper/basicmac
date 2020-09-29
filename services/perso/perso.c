@@ -85,11 +85,9 @@ static void rx_start (osjob_t* job) {
 
 static void rx_done (osjob_t* job) {
     int len = perso.rxn;
-    debug_printf("rx: (%d) %h\r\n", len, perso.buf.bytes, len);
     while( len > 0) {
         int used;
         int n = cobs_decode(perso.buf.bytes, len, &used);
-        debug_printf("decode: %d %h\r\n", n);
         if( n >= 8 && (n & 3) == 0 && 8 + ((perso.buf.bytes[3] + 3) & ~3) == n
                 && crc32(perso.buf.words, (n>>2)-1) == perso.buf.words[(n>>2)-1] ) {
 
@@ -101,9 +99,7 @@ static void rx_done (osjob_t* job) {
                 perso.buf.bytes[n++] = 0xff;
             }
             perso.buf.words[n>>2] = crc32(perso.buf.words, n>>2);
-            debug_printf("resp: (%d) %h\r\n", n+4, perso.buf.bytes, n+4);
             cobs_encode(perso.buf.bytes, n+4);
-            debug_printf("tx: (%d) %h\r\n", n+4+2, perso.buf.bytes, n+4+2);
             usart_send(BRD_PERSO_UART, perso.buf.bytes, n+4+2, job, tx_done);
             return;
         }
@@ -113,7 +109,6 @@ static void rx_done (osjob_t* job) {
 }
 
 static void tx_done (osjob_t* job) {
-    debug_printf("txdone\r\n");
     rx_start(job);
 }
 

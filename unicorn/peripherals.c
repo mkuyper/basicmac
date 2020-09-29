@@ -228,6 +228,7 @@ static void fuart_irq (void) {
     fuart_reg* reg = PERIPH_REG(HAL_PID_FUART);
     fuart_rx_cb(reg->rxbuf, reg->rxlen);
     reg->ctrl &= ~FUART_C_RXEN;
+    psvc(HAL_PID_FUART, FUART_PSVC_CLEARIRQ);
 }
 
 void fuart_init (void) {
@@ -242,6 +243,7 @@ void fuart_tx (unsigned char* buf, int n) {
     fuart_reg* reg = PERIPH_REG(HAL_PID_FUART);
     ASSERT(n <= sizeof(reg->txbuf));
     memcpy(reg->txbuf, buf, n);
+    reg->txlen = n;
     psvc(HAL_PID_FUART, FUART_PSVC_SEND);
 }
 
