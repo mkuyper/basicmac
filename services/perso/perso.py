@@ -3,7 +3,7 @@
 # This file is subject to the terms and conditions defined in file 'LICENSE',
 # which is part of this source code package.
 
-from typing import Optional, Tuple
+from typing import ClassVar, Optional, Tuple
 
 import asyncio
 import random
@@ -11,6 +11,7 @@ import struct
 
 from binascii import crc32
 from cobs import cobs
+from dataclasses import dataclass
 
 class PTESerialPort:
     def send(self, data:bytes) -> None:
@@ -20,9 +21,11 @@ class PTESerialPort:
         raise NotImplementedError
 
 class PTE:
-    def __init__(self, port:PTESerialPort) -> None:
+    def __init__(self, port:PTESerialPort, *, timeout:Optional[float]=5.0) -> None:
         self.port = port
         self.tag = random.randint(0x0000, 0xffff)
+        self.sync = False
+        self.timeout = timeout
 
     def pack(self, cmd:int, payload:bytes) -> bytes:
         assert len(payload) <= 236 
@@ -58,7 +61,11 @@ class PTE:
             return buf[:i], buf[i+1:]
 
     async def _xchg(self, cmd:int, payload:bytes=b'') -> Tuple[int,bytes]:
-        self.port.send(PTE.frame(cobs.encode(self.pack(cmd, payload))))
+        p = PTE.frame(cobs.encode(self.pack(cmd, payload)))
+        if not self.sync:
+            self.sync = True
+            p = b'\x55\0\0\0' + p
+        self.port.send(p)
         while True:
             b = await self.port.recv()
             while b:
@@ -70,13 +77,21 @@ class PTE:
                 if (t := self.unpack(f)):
                     return t
 
-    async def xchg(self, cmd:int, payload:bytes=b'', *, timeout:Optional[float]=None) -> Tuple[int,bytes]:
-        return await asyncio.wait_for(self._xchg(cmd, payload), timeout=timeout)
+    async def xchg(self, cmd:int, payload:bytes=b'') -> Tuple[int,bytes]:
+        return await asyncio.wait_for(self._xchg(cmd, payload), timeout=self.timeout)
 
-    RES_EPARAM = 0x80
-    RES_INTERR = 0x81
-    RES_WTX    = 0xFE
-    RES_NOIMPL = 0xFF
+    CMD_NOP      = 0x00
+    CMD_RUN      = 0x01
+    CMD_RESET    = 0x02
+
+    CMD_EE_READ  = 0x90
+    CMD_EE_WRITE = 0x91
+
+    RES_OK       = 0x00
+    RES_EPARAM   = 0x80
+    RES_INTERR   = 0x81
+    RES_WTX      = 0xFE
+    RES_NOIMPL   = 0xFF
 
     @staticmethod
     def check_res(res:int, expected:Optional[int]=None) -> None:
@@ -89,11 +104,26 @@ class PTE:
         if expected is not None and res != expected:
             raise ValueError(f'Unexpected response code 0x{res:02x}')
 
-    NOP = 0x00
-
-    async def nop(self, *, timeout:Optional[float]=None) -> None:
-        res, pl = await self.xchg(PTE.NOP, timeout=timeout)
+    async def nop(self) -> None:
+        res, pl = await self.xchg(PTE.CMD_NOP)
         PTE.check_res(res, expected=0x7F)
         if pl:
             raise ValueError(f'Unexpected response payload {pl.hex()}')
+
+    async def reset(self) -> None:
+        res, pl = await self.xchg(PTE.CMD_RESET)
+        PTE.check_res(res, expected=PTE.RES_OK)
+        if pl:
+            raise ValueError(f'Unexpected response payload {pl.hex()}')
+
+    async def ee_read(self, offset:int, length:int) -> None:
+        res, pl = await self.xchg(PTE.CMD_EE_READ, struct.pack('<HB', offset, length))
+        PTE.check_res(res, expected=PTE.RES_OK)
+        if pl is None or len(pl) != length:
+            raise ValueError(f'Unexpected response payload length {len(pl) if pl else 0}')
+        return pl
+
+@dataclass
+class PersodataV1:
+    MAGIC:ClassVar[int] = 0xb2dc4db2
 

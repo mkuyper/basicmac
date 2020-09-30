@@ -15,6 +15,10 @@
 #error "Personalization module requires UART, please define BRD_PERSO_UART"
 #endif
 
+#ifndef BRD_PERSO_UART_BAUDRATE
+#define BRD_PERSO_UART_BAUDRATE 115200
+#endif
+
 enum {
     CMD_NOP      = 0x00,
     CMD_RUN      = 0x01,
@@ -24,17 +28,19 @@ enum {
     CMD_EE_WRITE = 0x91,
 };
 
-static int process (unsigned char* buf) { // XXX
-    if( buf[0] == CMD_NOP ) {
-        buf[0] = 0x7F;
-        return 0;
-    }
+enum {
+    RES_OK       = 0x00,
+    RES_EPARAM   = 0x80,
+    RES_INTERR   = 0x81,
+    RES_WTX      = 0xFE,
+    RES_NOIMPL   = 0xFF,
+};
 
-    //int len = buf[3];
-
-    buf[0] = 0xff;
-    return 0;
-}
+enum {
+    OFF_CMD      = 0,
+    OFF_LEN      = 3,
+    OFF_PAYLOAD  = 4,
+};
 
 typedef union {
     unsigned char bytes[256];
@@ -44,14 +50,67 @@ typedef union {
 static struct {
     commbuf buf;
     int rxn;
+    osjobcb_t cb;
 } perso;
+
+// forward declarations
+static void rx_start (osjob_t* job);
+static void rx_done (osjob_t* job);
+static void tx_start (osjob_t* job);
+static void tx_done (osjob_t* job);
+
+static void cb_reboot (osjob_t* job) {
+    hal_reboot();
+}
+
+static void perso_process (osjob_t* job) {
+    unsigned char* buf = perso.buf.bytes;
+    perso.cb = rx_start;
+    switch( buf[OFF_CMD] ) {
+        case CMD_NOP:
+            buf[OFF_CMD] = 0x7F;
+            buf[OFF_LEN] = 0;
+            break;
+
+        case CMD_RESET:
+            buf[OFF_CMD] = RES_OK;
+            buf[OFF_LEN] = 0;
+            perso.cb = cb_reboot;
+            break;
+
+#if defined(PERIPH_EEPROM) && defined(EEPROM_BASE) && defined(EEPROM_SZ)
+        case CMD_EE_READ:
+            if( buf[OFF_LEN] == 3 ) {
+                int off = os_rlsbf2(buf + OFF_PAYLOAD), len = buf[OFF_PAYLOAD + 2];
+                if( len < 128 && off + len <= EEPROM_SZ ) {
+                    memcpy(buf + OFF_PAYLOAD, (unsigned char*) EEPROM_BASE + off, len);
+                    buf[OFF_CMD] = RES_OK;
+                    buf[OFF_LEN] = len;
+                    break;
+                }
+            }
+            goto eparam;
+
+        case CMD_EE_WRITE:
+#endif
+        default:
+            buf[OFF_CMD] = RES_NOIMPL;
+            buf[OFF_LEN] = 0;
+            break;
+eparam:
+            buf[OFF_CMD] = RES_EPARAM;
+            buf[OFF_LEN] = 0;
+            break;
+    }
+    tx_start(job);
+}
 
 // Decode COBS in-place
 // - *pused will contain number of input bytes consumed
 // - returns number of bytes in frame (without trailing 0x00), or -1 if invalid
 static int cobs_decode (unsigned char* buf, int len, int* pused) {
     int skip = 0, out = 0, i = 0;
-    while ( i < len) {
+    while ( i < len ) {
         unsigned char ch = buf[i++];
         if( ch == 0x00 ) {
             out = skip ? -1 : (out ? out - 1 : 0);
@@ -89,9 +148,6 @@ static void cobs_encode (unsigned char* buf, int len) {
     *buf = 0x00;
 }
 
-static void rx_done (osjob_t* job); // fwd decl
-static void tx_done (osjob_t* job); // fwd decl
-
 static void rx_start (osjob_t* job) {
     perso.rxn = sizeof(perso.buf);
     usart_recv(BRD_PERSO_UART, perso.buf.bytes, &perso.rxn, sec2osticks(3600), ms2osticks(100), job, rx_done);
@@ -99,23 +155,12 @@ static void rx_start (osjob_t* job) {
 
 static void rx_done (osjob_t* job) {
     int len = perso.rxn;
-    while( len > 0) {
+    while( len > 0 ) {
         int used;
         int n = cobs_decode(perso.buf.bytes, len, &used);
-        if( n >= 8 && (n & 3) == 0 && 8 + ((perso.buf.bytes[3] + 3) & ~3) == n
+        if( n >= 8 && (n & 3) == 0 && 8 + ((perso.buf.bytes[OFF_LEN] + 3) & ~3) == n
                 && crc32(perso.buf.words, (n>>2)-1) == perso.buf.words[(n>>2)-1] ) {
-
-            // TODO - dispatch as job
-            n = process(perso.buf.bytes);
-
-            perso.buf.bytes[3] = n;
-            n += 4;
-            while( (n & 3) != 0) {
-                perso.buf.bytes[n++] = 0xff;
-            }
-            perso.buf.words[n>>2] = crc32(perso.buf.words, n>>2);
-            cobs_encode(perso.buf.bytes, n+4);
-            usart_send(BRD_PERSO_UART, perso.buf.bytes, n+4+2, job, tx_done);
+            perso_process(job);
             return;
         }
         memmove(perso.buf.bytes, perso.buf.bytes + used, (len -= used));
@@ -123,12 +168,23 @@ static void rx_done (osjob_t* job) {
     rx_start(job);
 }
 
+static void tx_start (osjob_t* job) {
+    int n = perso.buf.bytes[OFF_LEN] + 4;
+    ASSERT(n <= 236);
+    while( (n & 3) != 0 ) {
+        perso.buf.bytes[n++] = 0xff;
+    }
+    perso.buf.words[n>>2] = crc32(perso.buf.words, n>>2);
+    cobs_encode(perso.buf.bytes, n+4);
+    usart_send(BRD_PERSO_UART, perso.buf.bytes, n+4+2, job, tx_done);
+}
+
 static void tx_done (osjob_t* job) {
-    rx_start(job);
+    perso.cb(job);
 }
 
 bool _perso_main (osjob_t* job) {
-    // TODO - check fuse
+    // TODO - check fuse / security bit (if any -- possibly add soft-fuse to pd area?)
 
     // sample detect line, enter perso mode if externally driven
     pio_set(GPIO_PERSO_DET, PIO_INP_PAU);
@@ -137,9 +193,13 @@ bool _perso_main (osjob_t* job) {
     pio_default(GPIO_PERSO_DET);
 
     if( enter_perso ) {
-        debug_printf("perso: Entering perso...\r\n");
-        // XXX -- setup UART, disable debug uart if same
-        usart_start(BRD_PERSO_UART, 115200);
+        debug_printf("perso: entering personalization/test mode\r\n");
+#ifdef BRD_DEBUG_UART
+        if( BRD_DEBUG_UART == BRD_PERSO_UART ){
+            // TODO - suspend debug UART
+        }
+#endif
+        usart_start(BRD_PERSO_UART, BRD_PERSO_UART_BAUDRATE);
 
         rx_start(job);
     }

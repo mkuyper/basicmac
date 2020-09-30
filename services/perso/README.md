@@ -14,7 +14,7 @@ recovery; while enabling a simple and safe implementation on the device.
 Logic-level asynchronous serial communication with the following settings shall
 be used:
 
-- Bit rate: 115,200 bps
+- Bit rate: fixed or auto-baud detection
 - Data bits: 8
 - Parity: none
 - Stop bits: 1
@@ -30,6 +30,12 @@ operation.
 > line in active-high mode. Since the idle state of a UART line is logic high,
 > a PTE is easily detected whenever a serial transceiver is connected to the
 > device.
+
+The bit rate may either be configured to a fixed value (e.g. 115,200 bps), or
+auto-baud detection can be used if supported by the hardware. The data framing
+employed by the data link layer allows synchrozation characters to be sent by
+the PTE, such as a `0x55` byte. To resynchronize the frame detector, a `0x00`
+character shall be sent by the PTE after any synchronization characters.
 
 
 ## Data Link Layer
@@ -88,9 +94,9 @@ packet. The host shall not send any further command packet until it receives a
 response packet from the device or has determined that the command or response
 packet might have been dropped due to communication failure. As a special case,
 the device may respond with a status of *Wait extension*, which indicates that
-the command is still bein processed. Upon receipt of a wait extension, the host
-shall reset its time-out mechanism and continue waiting for the actual response
-code.
+the command is still being processed. Upon receipt of a wait extension, the
+host shall reset its time-out mechanism and continue waiting for the actual
+response code.
 
 
 ## Application Layer

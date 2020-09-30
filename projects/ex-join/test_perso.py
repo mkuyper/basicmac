@@ -23,7 +23,21 @@ async def createtest(_=vtime):
 @test('Perso')
 async def _(dut=createtest):
     gpio = dut.sim.get_peripheral(GPIO)
-    pte = PTE(FUART_PTESerialPort(dut.sim.get_peripheral(FastUART)))
     gpio.drive(24, True)
+    pte = PTE(FUART_PTESerialPort(dut.sim.get_peripheral(FastUART)))
+
     await asyncio.sleep(5)
-    await pte.nop(timeout=5)
+    await pte.nop()
+
+    pd = await pte.ee_read(0x0060, 10)
+    print(pd)
+
+    await asyncio.sleep(1)
+    await pte.reset()
+
+    gpio = dut.sim.get_peripheral(GPIO)
+    gpio.drive(24, True)
+    pte = PTE(FUART_PTESerialPort(dut.sim.get_peripheral(FastUART)))
+
+    await asyncio.sleep(10)
+    await pte.nop()

@@ -31,6 +31,10 @@ static inline void irq (void) {
     ((void (*) (uint32_t)) HAL_svc)(SVC_IRQ);
 }
 
+static inline void reset (void) {
+    ((void (*) (uint32_t)) HAL_svc)(SVC_RESET);
+}
+
 void hal_init (void* bootarg) {
     sim.boottab = bootarg;
     ASSERT(sim.boottab->version >= 0x105); // require bootloader v261
@@ -203,7 +207,7 @@ void sha256 (uint32_t* hash, const uint8_t* msg, uint32_t len) {
 }
 
 void hal_reboot (void) {
-    // TODO - implement
+    reset();
     // not reached
     hal_failed();
 }

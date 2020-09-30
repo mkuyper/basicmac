@@ -96,6 +96,7 @@ class Simulation():
     SVC_PERIPH_REG  = 1
     SVC_WFI         = 2
     SVC_IRQ         = 3
+    SVC_RESET       = 4
     SVC_PERIPH_BASE = 0x01000000
 
     dummyirqhandler = IrqHandler()
@@ -139,6 +140,9 @@ class Simulation():
     def map_peripheral(self, pid:int, regs:'ctypes._CData') -> None:
         self.emu.mem_map_ptr(Simulation.PERIPH_BASE + (pid * 0x1000),
                 ctypes.sizeof(regs), uc.UC_PROT_ALL, ctypes.byref(regs))
+
+    def unmap_peripheral(self, pid:int) -> None:
+        self.emu.mem_unmap(Simulation.PERIPH_BASE + (pid * 0x1000), 0x1000)
 
     def get_peripheral(self, ptype:Type[T]) -> T:
         for p in self.peripherals.values():
@@ -196,7 +200,10 @@ class Simulation():
                 self.emu.mem_read(Simulation.FLASH_BASE, 8))
 
         self.irqhandler = Simulation.dummyirqhandler
-        self.runtime.setclock(None)
+        self.runtime.reset()
+
+        for pid in self.peripherals:
+            self.unmap_peripheral(pid)
         self.peripherals.clear()
         self.prerunhooks.clear()
 
@@ -207,7 +214,11 @@ class Simulation():
 
         self.running.set()
 
-    def svc_panic(self) -> bool:
+    SRC_CONTINUE = 0    # continue run loop
+    SRC_RETURN   = 1    # return to caller
+    SRC_RESET    = 2    # reset simulation
+
+    def svc_panic(self) -> int:
         ptype  = self.emu.reg_read(uca.UC_ARM_REG_R1)
         reason = self.emu.reg_read(uca.UC_ARM_REG_R2)
         addr   = self.emu.reg_read(uca.UC_ARM_REG_R3)
@@ -217,26 +228,30 @@ class Simulation():
                 f', reason={reason} (0x{reason:x})'
                 f', addr=0x{addr:08x}, lr=0x{lr:08x}')
 
-    def svc_register(self) -> bool:
+    def svc_register(self) -> int:
         pid  = self.emu.reg_read(uca.UC_ARM_REG_R1)
         uuid = self.emu.reg_read(uca.UC_ARM_REG_R2)
         self.peripherals[pid] = Peripherals.create(
                 UUID(bytes=bytes(self.emu.mem_read(uuid, 16))), self, pid)
-        return True
+        return Simulation.SRC_RETURN
 
-    def svc_wfi(self) -> bool:
+    def svc_wfi(self) -> int:
         if not self.irqhandler.requested():
             self.running.clear()
-        return False
+        return Simulation.SRC_CONTINUE
 
-    def svc_irq(self) -> bool:
-        return False
+    def svc_irq(self) -> int:
+        return Simulation.SRC_CONTINUE
+
+    def svc_reset(self) -> int:
+        return Simulation.SRC_RESET
 
     svc_lookup = {
             SVC_PANIC      : svc_panic,
             SVC_PERIPH_REG : svc_register,
             SVC_WFI        : svc_wfi,
             SVC_IRQ        : svc_irq,
+            SVC_RESET      : svc_reset,
             }
 
     def _intr(self, intno:int) -> None:
@@ -247,11 +262,17 @@ class Simulation():
                 handler = Simulation.svc_lookup.get(svcid)
                 if handler is None:
                     raise RuntimeError(f'Unknown SVCID {svcid}, lr=0x{lr:08x}')
-                if handler(self):
-                    self.emu.reg_write(uca.UC_ARM_REG_PC, lr)
-                else:
+                if (c := handler(self)) == Simulation.SRC_CONTINUE:
                     self.pc = lr
                     self.emu.emu_stop()
+                elif c == Simulation.SRC_RETURN:
+                    self.emu.reg_write(uca.UC_ARM_REG_PC, lr)
+                elif c == Simulation.SRC_RESET:
+                    self.reset()
+                    self.emu.emu_stop()
+                else:
+                    raise RuntimeError(f'Invalid svc return code {c}')
+
             else:
                 pid = (svcid >> 16) & 0xff
                 p = self.peripherals.get(pid)
