@@ -3,7 +3,7 @@
 # This file is subject to the terms and conditions defined in file 'LICENSE',
 # which is part of this source code package.
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import asyncio
 import hashlib
@@ -129,25 +129,46 @@ class PTE:
         res, pl = await self.xchg(PTE.CMD_EE_WRITE, struct.pack('<HH', offset, 0) + data)
         PTE.check_res(res, expected=PTE.RES_OK)
 
-class PersoDataV1:
-    MAGIC = 0xb2dc4db2
-    FORMAT_NH = '<IIII16s8s8s16s16s'
-    FORMAT = FORMAT_NH + '32s'
-    SIZE = struct.calcsize(FORMAT)
+class PersoData:
+    V1_MAGIC = 0xb2dc4db2
+    V1_FORMAT_NH = '<IIII16s8s8s16s16s'
+    V1_FORMAT = V1_FORMAT_NH + '32s'
+    V1_SIZE = struct.calcsize(V1_FORMAT)
 
-    def __init__(self, hwid, region, serial, deveui:Eui, joineui:Eui,
-            nwkkey:bytes, appkey:bytes) -> None:
-        self.hwid = hwid
-        self.region = region
-        self.serial = serial
-        self.deveui = deveui
-        self.joineui = joineui
-        self.nwkkey = nwkkey
-        self.appkey = appkey
+    @staticmethod
+    def unpack(data:bytes) -> Union['PersoDataV1']:
+        if len(data) < 4:
+            raise ValueError('Invalid data size')
+        magic, = struct.unpack('<I', data[:4])
+
+        if magic == PersoData.V1_MAGIC:
+            if len(data) != PersoData.V1_SIZE:
+                raise ValueError('Invalid data size (expected: {PersoData.V1_SIZE}, received: {len(data)}')
+            _, hwid, region, reserved, serial, deveui, joineui, nwkkey, appkey, h = struct.unpack(
+                    PersoData.V1_FORMAT, data)
+            if h != hashlib.sha256(data[:-32]).digest():
+                raise ValueError('Hash validation failed')
+
+            if (idx := serial.find(b'\0')) >= 0:
+                serial = serial[:idx]
+            return PersoDataV1(hwid, region, serial.decode('ascii'), Eui(deveui), Eui(joineui), nwkkey, appkey)
+
+        raise ValueError(f'Unknown magic: 0x{magic:08x}')
+
+
+@dataclass
+class PersoDataV1:
+    hwid:int
+    region:int
+    serial:str
+    deveui:Eui
+    joineui:Eui
+    nwkkey:bytes
+    appkey:bytes
 
     def pack(self) -> bytes:
-        pd = struct.pack(PersoDataV1.FORMAT_NH,
-                PersoDataV1.MAGIC,
+        pd = struct.pack(PersoData.V1_FORMAT_NH,
+                PersoData.V1_MAGIC,
                 self.hwid,
                 self.region,
                 0, # reserved
@@ -157,10 +178,4 @@ class PersoDataV1:
                 self.nwkkey,
                 self.appkey)
         h = hashlib.sha256(pd).digest()
-        print(pd.hex())
         return pd + h
-
-    @staticmethod
-    def unpack(data:bytes) -> 'PersoDataV1':
-        magic, hwid, region, reserved, serial, deveui, joineui, nwkkey, appkey, h = struct.unpack(
-                PersoDataV1.FORMAT, data)

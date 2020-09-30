@@ -126,6 +126,8 @@ void hal_failed (void);
 
 #ifdef CFG_DEBUG
 
+void hal_debug_suspend (void);
+void hal_debug_resume (void);
 void hal_debug_str (const char* str);
 void hal_debug_led (int val);
 

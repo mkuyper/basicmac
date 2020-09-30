@@ -65,18 +65,17 @@ static void cb_reboot (osjob_t* job) {
 
 static void perso_process (osjob_t* job) {
     unsigned char* buf = perso.buf.bytes;
-    perso.cb = rx_start;
+    perso.cb = rx_start; // by default, start receiving next command upon completion
+
     switch( buf[OFF_CMD] ) {
         case CMD_NOP:
             buf[OFF_CMD] = 0x7F;
-            buf[OFF_LEN] = 0;
-            break;
+            goto nopl;
 
         case CMD_RESET:
             buf[OFF_CMD] = RES_OK;
-            buf[OFF_LEN] = 0;
             perso.cb = cb_reboot;
-            break;
+            goto nopl;
 
 #if defined(PERIPH_EEPROM) && defined(EEPROM_BASE) && defined(EEPROM_SZ)
         case CMD_EE_READ:
@@ -94,7 +93,6 @@ static void perso_process (osjob_t* job) {
         case CMD_EE_WRITE:
             if( buf[OFF_LEN] >= 2 ) {
                 int off = os_rlsbf2(buf + OFF_PAYLOAD), len = buf[OFF_LEN] - 4;
-                debug_printf("off=%d, len=%d\r\n", off, len);
                 if( len < 128 && (len & 3) == 0 && off + len <= EEPROM_SZ ) {
                     eeprom_copy((unsigned char*) EEPROM_BASE + off, buf + OFF_PAYLOAD + 4, len);
                     buf[OFF_CMD] = RES_OK;
@@ -107,12 +105,11 @@ static void perso_process (osjob_t* job) {
 
         default:
             buf[OFF_CMD] = RES_NOIMPL;
-            buf[OFF_LEN] = 0;
-            break;
+            goto nopl;
 eparam:
             buf[OFF_CMD] = RES_EPARAM;
+nopl:
             buf[OFF_LEN] = 0;
-            break;
     }
     tx_start(job);
 }
@@ -208,11 +205,10 @@ bool _perso_main (osjob_t* job) {
         debug_printf("perso: entering personalization/test mode\r\n");
 #ifdef BRD_DEBUG_UART
         if( BRD_DEBUG_UART == BRD_PERSO_UART ){
-            // TODO - suspend debug UART
+            hal_debug_suspend();
         }
 #endif
         usart_start(BRD_PERSO_UART, BRD_PERSO_UART_BAUDRATE);
-
         rx_start(job);
     }
 
