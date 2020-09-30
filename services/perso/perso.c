@@ -92,7 +92,19 @@ static void perso_process (osjob_t* job) {
             goto eparam;
 
         case CMD_EE_WRITE:
+            if( buf[OFF_LEN] >= 2 ) {
+                int off = os_rlsbf2(buf + OFF_PAYLOAD), len = buf[OFF_LEN] - 4;
+                debug_printf("off=%d, len=%d\r\n", off, len);
+                if( len < 128 && (len & 3) == 0 && off + len <= EEPROM_SZ ) {
+                    eeprom_copy((unsigned char*) EEPROM_BASE + off, buf + OFF_PAYLOAD + 4, len);
+                    buf[OFF_CMD] = RES_OK;
+                    buf[OFF_LEN] = 0;
+                    break;
+                }
+            }
+            goto eparam;
 #endif
+
         default:
             buf[OFF_CMD] = RES_NOIMPL;
             buf[OFF_LEN] = 0;

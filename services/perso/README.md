@@ -184,14 +184,14 @@ Device -> Host: |00| tag |nb|     data     |
 
 #### `0x91` Write EEPROM Data
 ```
-                +--+--+--+--+--+--+---  -  -  ---+
-Host -> Device: |04| tag |ln| off |     data     |
-                +--+--+--+--+--+--+---  -  -  ---+
+                +--+--+--+--+--+--+--+--+---  -  -  ---+
+Host -> Device: |04| tag |ln| off | res.|     data     |
+                +--+--+--+--+--+--+--+--+---  -  -  ---+
 
                 +--+--+--+--+
 Device -> Host: |00| tag |00|
                 +--+--+--+--+
 ```
-**Description:** This command writes *data* (*ln*-2 bytes) to EEPROM at offset *off*.
+**Description:** This command writes *data* (*ln*-4 bytes) to EEPROM at offset *off*.
 
 [COBS]: https://en.wikipedia.org/wiki/Consistent_Overhead_Byte_Stuffing

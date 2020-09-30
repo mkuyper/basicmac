@@ -3,15 +3,17 @@
 # This file is subject to the terms and conditions defined in file 'LICENSE',
 # which is part of this source code package.
 
-from typing import ClassVar, Optional, Tuple
+from typing import Optional, Tuple
 
 import asyncio
+import hashlib
 import random
 import struct
 
 from binascii import crc32
 from cobs import cobs
 from dataclasses import dataclass
+from rtlib import Eui
 
 class PTESerialPort:
     def send(self, data:bytes) -> None:
@@ -28,7 +30,7 @@ class PTE:
         self.timeout = timeout
 
     def pack(self, cmd:int, payload:bytes) -> bytes:
-        assert len(payload) <= 236 
+        assert len(payload) <= 236
         self.tag = (self.tag + 1) & 0xffff
         l = len(payload)
         p = struct.pack('<BHB', cmd, self.tag, l) + payload
@@ -116,14 +118,49 @@ class PTE:
         if pl:
             raise ValueError(f'Unexpected response payload {pl.hex()}')
 
-    async def ee_read(self, offset:int, length:int) -> None:
+    async def ee_read(self, offset:int, length:int) -> bytes:
         res, pl = await self.xchg(PTE.CMD_EE_READ, struct.pack('<HB', offset, length))
         PTE.check_res(res, expected=PTE.RES_OK)
         if pl is None or len(pl) != length:
             raise ValueError(f'Unexpected response payload length {len(pl) if pl else 0}')
         return pl
 
-@dataclass
-class PersodataV1:
-    MAGIC:ClassVar[int] = 0xb2dc4db2
+    async def ee_write(self, offset:int, data:bytes) -> None:
+        res, pl = await self.xchg(PTE.CMD_EE_WRITE, struct.pack('<HH', offset, 0) + data)
+        PTE.check_res(res, expected=PTE.RES_OK)
 
+class PersoDataV1:
+    MAGIC = 0xb2dc4db2
+    FORMAT_NH = '<IIII16s8s8s16s16s'
+    FORMAT = FORMAT_NH + '32s'
+    SIZE = struct.calcsize(FORMAT)
+
+    def __init__(self, hwid, region, serial, deveui:Eui, joineui:Eui,
+            nwkkey:bytes, appkey:bytes) -> None:
+        self.hwid = hwid
+        self.region = region
+        self.serial = serial
+        self.deveui = deveui
+        self.joineui = joineui
+        self.nwkkey = nwkkey
+        self.appkey = appkey
+
+    def pack(self) -> bytes:
+        pd = struct.pack(PersoDataV1.FORMAT_NH,
+                PersoDataV1.MAGIC,
+                self.hwid,
+                self.region,
+                0, # reserved
+                self.serial.encode('ascii'),
+                self.deveui.as_bytes(),
+                self.joineui.as_bytes(),
+                self.nwkkey,
+                self.appkey)
+        h = hashlib.sha256(pd).digest()
+        print(pd.hex())
+        return pd + h
+
+    @staticmethod
+    def unpack(data:bytes) -> 'PersoDataV1':
+        magic, hwid, region, reserved, serial, deveui, joineui, nwkkey, appkey, h = struct.unpack(
+                PersoDataV1.FORMAT, data)
