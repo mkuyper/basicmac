@@ -1,3 +1,4 @@
+// Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
 // Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 //
 // This file is subject to the terms and conditions defined in file 'LICENSE',
@@ -5,6 +6,7 @@
 
 #include "lmic.h"
 #include "lwmux/lwmux.h"
+#include "svcdefs.h"
 
 static lwm_job lj;
 static osjob_t* mainjob;
@@ -31,7 +33,7 @@ void app_dl (int port, unsigned char* data, int dlen, unsigned int flags) {
     debug_printf("DL[%d]: %h\r\n", port, data, dlen);
 }
 
-void app_main (osjob_t* job) {
+bool app_main (osjob_t* job) {
     debug_printf("Hello World!\r\n");
 
     // join network
@@ -42,4 +44,7 @@ void app_main (osjob_t* job) {
 
     // initiate first uplink
     next(mainjob);
+
+    // indicate that we are running
+    return true;
 }

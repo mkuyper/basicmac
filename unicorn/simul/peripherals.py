@@ -7,6 +7,7 @@ from typing import Any, List, Optional, Set
 
 import asyncio
 import ctypes
+import random
 
 from uuid import UUID
 
@@ -135,6 +136,140 @@ class Timer(Peripheral, Clock):
         self.cancel()
         self.th = asyncio.get_running_loop().call_at(
                 self.epoch + (self.reg.target / Timer.TICKS_PER_SEC), self.alarm)
+
+
+# -----------------------------------------------------------------------------
+# Peripheral: GPIO
+
+@Peripherals.add
+class GPIO(Peripheral):
+    uuid = UUID('76d5885a-ff99-11ea-9aa3-cd4b514dc224')
+
+    @Peripherals.register
+    class GPIORegister(ctypes.LittleEndianStructure):
+        _fields_ = [(r, ctypes.c_uint32) for r in ('value', 'outm', 'outv', 'pdn', 'pup', 'rise', 'fall', 'irq')]
+
+    def init(self) -> None:
+        self.reg = GPIO.GPIORegister()
+        self.sim.map_peripheral(self.pid, self.reg)
+
+        # external interface
+        self.inpm = 0  # connected input
+        self.inpv = 0  # input value
+        self.epup = 0  # external pull-up
+        self.epdn = 0  # external pull-down
+
+        self.watchers:Set[asyncio.Event] = set()
+
+    def extconfig(self, pio:int, *, pullup:bool=False, pulldn:bool=False) -> None:
+        mask = (1 << pio)
+        if pullup:
+            self.epup |= mask
+        else:
+            self.epup &= ~mask
+        if pulldn:
+            self.epdn |= mask
+        else:
+            self.epdn &= ~mask
+        self.update()
+
+    async def waitfor(self, pio:int, lvl:bool) -> None:
+        mask = (1 << pio)
+        if (not not (self.reg.value & mask)) != lvl:
+            ev = asyncio.Event()
+            self.watchers.add(ev)
+            while (not not (self.reg.value & mask)) != lvl:
+                await ev.wait()
+                ev.clear()
+            self.watchers.remove(ev)
+
+    def drive(self, pio:int, value:Optional[bool]) -> None:
+        mask = (1 << pio)
+        if value is None:
+            self.inpm &= ~mask
+        else:
+            if value:
+                self.inpv |= mask
+            else:
+                self.inpv &= ~mask
+            self.inpm |= mask
+        self.update()
+
+    def update(self) -> None:
+        if self.reg.outm & self.inpm:
+            raise RuntimeError(f'GPIO short circuit: {bin(self.reg.outm & self.inpm)}')
+
+        val  = self.reg.pup | self.epup # pull-ups
+        val |= random.getrandbits(32) & (~self.reg.pdn & ~self.epdn) # floaters
+        val &= ~(self.reg.outm | self.inpm) # mask out driven pins
+        val |= self.reg.outm & self.reg.outv # internally driven
+        val |= self.inpm & self.inpv # externally driven
+
+        cval = self.reg.value ^ val
+        self.reg.value = val
+
+        if cval:
+            self.reg.irq |= ((self.reg.rise & cval & val) | (self.reg.fall & cval & ~val))
+            for e in self.watchers:
+                e.set()
+
+        if self.reg.irq:
+            self.sim.irqhandler.set(self.pid)
+        else:
+            self.sim.irqhandler.clear(self.pid)
+
+    def svc(self, fid:int) -> None:
+        assert fid == 0
+        self.update()
+
+
+# -----------------------------------------------------------------------------
+# Peripheral: Fast UART
+
+@Peripherals.add
+class FastUART(Peripheral):
+    uuid = UUID('a806819e-0134-11eb-a845-f739a072dd5c')
+
+    C_RXEN = (1 << 0)
+
+    @Peripherals.register
+    class FastUARTRegister(ctypes.LittleEndianStructure):
+        _fields_ = [*[(r, ctypes.c_ubyte*1024) for r in ('txbuf', 'rxbuf')], *[(r, ctypes.c_uint32) for r in ('ctrl', 'rxlen', 'txlen')]]
+
+    def init(self) -> None:
+        self.reg = FastUART.FastUARTRegister()
+        self.sim.map_peripheral(self.pid, self.reg)
+        self.event = asyncio.Event()
+
+    # receive from device
+    async def recv(self, *, timeout:Optional[float]=None) -> Optional[bytes]:
+        self.event.clear()
+        try:
+            await asyncio.wait_for(self.event.wait(), timeout=timeout)
+        except asyncio.TimeoutError:
+            return None
+        return bytes(self.reg.txbuf[:self.reg.txlen])
+
+    # send to device
+    def send(self, data:bytes) -> None:
+        if self.reg.ctrl & FastUART.C_RXEN:
+            self.reg.rxbuf[:len(data)] = data
+            self.reg.rxlen = len(data)
+            self.sim.irqhandler.set(self.pid)
+
+    def svc_send(self) -> None:
+        self.event.set()
+
+    def svc_clearirq(self) -> None:
+        self.sim.irqhandler.clear(self.pid)
+
+    svc_lookup = {
+            0: svc_send,
+            1: svc_clearirq,
+            }
+
+    def svc(self, fid:int) -> None:
+        FastUART.svc_lookup[fid](self)
 
 
 # -----------------------------------------------------------------------------
