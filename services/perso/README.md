@@ -2,11 +2,12 @@
 *Version 0.1*
 
 This document describes the functionality and protocol implemented by the Basic
-MAC Personalization Service (perso).  It is intended to allow a way for devices
-to be tested and personalized on a production line via a serial connection.
+MAC Personalization Service (perso). It is intended to be used for in-fixture
+testing and personalizing of devices on a production line via serial
+connection.
 
 Design goals of the protocol include robustness, reliability and error
-recovery; while enabling a simple and safe implementation on the device.
+recovery, while enabling a simple and safe implementation on the device.
 
 
 ## Physical Layer
@@ -33,8 +34,8 @@ operation.
 
 The bit rate may either be configured to a fixed value (e.g. 115,200 bps), or
 auto-baud detection can be used if supported by the hardware. The data framing
-employed by the data link layer allows synchrozation characters to be sent by
-the PTE, such as a `0x55` byte. To resynchronize the frame detector, a `0x00`
+employed by the data link layer allows synchronization characters to be sent by
+the PTE, such as a `0x55` byte. To re-synchronize the frame detector, a `0x00`
 character shall be sent by the PTE after any synchronization characters.
 
 
@@ -105,7 +106,7 @@ All multi-byte fields shall be represented in little-endian byte order.
 
 ### Response Codes
 
-By convention, response codes that indicate sucess have the most-significant
+By convention, response codes that indicate success have the most-significant
 bit cleared; response codes indicating failure have this bit set. No payload
 should be included if the response code indicates failure.
 
