@@ -52,6 +52,16 @@
 
 #define BRD_USART_EN(m)                 (((BRD_USART) & (m)) != 0)
 
+// Timer instances
+#define BRD_TIM2                        (1 << 0)
+#define BRD_TIM3                        (1 << 1)
+
+// Timer peripherals
+#define BRD_TIM2_PERIPH                 tmr_t2
+#define BRD_TIM3_PERIPH                 tmr_t3
+
+#define BRD_TMR_EN(m)                   (((BRD_TMR) & (m)) != 0)
+
 
 #ifdef BRD_IMPL_INC
 #include BRD_IMPL_INC
