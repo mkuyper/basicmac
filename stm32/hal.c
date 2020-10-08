@@ -1076,26 +1076,13 @@ const irqdef HAL_irqdefs[] = {
 #endif
 #endif
 
-#if defined(BRD_PWM_TIM)
-#if BRD_PWM_TIM == 3
-    { TIM3_IRQn, pwm_irq },
+#if defined(BRD_TMR)
+#if BRD_TMR_EN(BRD_TIM2)
+    { TIM2_IRQn, tmr_t2_irq },
 #endif
+#if BRD_TMR_EN(BRD_TIM3)
+    { TIM3_IRQn, tmr_t3_irq },
 #endif
-
-#if defined(BRD_PIR_TIM)
-#if BRD_PIR_TIM == 3
-    { TIM3_IRQn, pir_tim_irq },
-#endif
-#endif
-
-#if defined(BRD_LED_TIM)
-#if BRD_LED_TIM == 2
-    { TIM2_IRQn, leds_pwm_irq },
-#endif
-#endif
-
-#if defined(BRD_IR_TIM)
-    { TIM2_IRQn, ir_tim_irq },
 #endif
 
 #if defined(HW_DMA)
