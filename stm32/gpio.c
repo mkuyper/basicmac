@@ -6,17 +6,22 @@
 
 #include "lmic.h"
 
-static inline void gpio_begin (int port) {
-    unsigned int enr = GPIO_RCC_ENR;
-    if ((enr & GPIO_EN(port)) == 0) {
-	GPIO_RCC_ENR = enr | GPIO_EN(port);
-	// dummy read as per errata
-	(void) GPIOx(port)->IDR;
+static unsigned int gpio_on[3];
+
+static void gpio_begin (int port) {
+    if( gpio_on[port] == 0 ) {
+        GPIO_RCC_ENR |= GPIO_EN(port);
+        // dummy read as per errata
+        (void) GPIOx(port)->IDR;
     }
+    gpio_on[port] += 1;
 }
 
-static inline void gpio_end (int port) {
-    GPIO_RCC_ENR &= ~GPIO_EN(port);
+static void gpio_end (int port) {
+    gpio_on[port] -= 1;
+    if( gpio_on[port] == 0 ) {
+        GPIO_RCC_ENR &= ~GPIO_EN(port);
+    }
 }
 
 void gpio_cfg_pin (int port, int pin, int gpiocfg) {
@@ -128,6 +133,53 @@ void pio_set (unsigned int pin, int value) {
         }
         gpio_cfg_pin(BRD_PORT(pin), BRD_PIN(pin), gpiocfg);
     }
+}
+
+void pio_direct_start (unsigned int pin, pio_direct* dpio) {
+    int port = BRD_PORT(pin);
+    dpio->gpio = GPIOx(port);
+    dpio->mask = 1 << BRD_PIN(pin);
+    dpio->m_out = 0x1 << (BRD_PIN(pin) << 1);
+    dpio->m_inp = ~(0x3 << (BRD_PIN(pin) << 1));
+    dpio->port = port;
+    gpio_begin(port);
+}
+
+void pio_direct_stop (pio_direct* dpio) {
+    gpio_end(dpio->port);
+}
+
+void pio_direct_inp (pio_direct* dpio) {
+    uint32_t r = dpio->gpio->MODER;
+    r &= dpio->m_inp; // clear bits
+    dpio->gpio->MODER = r;
+}
+
+void pio_direct_out (pio_direct* dpio) {
+    uint32_t r = dpio->gpio->MODER;
+    r &= dpio->m_inp; // clear bits
+    r |= dpio->m_out; // set bits
+    dpio->gpio->MODER = r;
+}
+
+void pio_direct_set (pio_direct* dpio, int value) {
+    if( value ) {
+        pio_direct_set1(dpio);
+    } else {
+        pio_direct_set0(dpio);
+    }
+}
+
+void pio_direct_set1 (pio_direct* dpio) {
+    dpio->gpio->BSRR = dpio->mask;
+}
+
+void pio_direct_set0 (pio_direct* dpio) {
+    dpio->gpio->BRR = dpio->mask;
+}
+
+unsigned int pio_direct_get (pio_direct* dpio) {
+    return dpio->gpio->IDR & dpio->mask;
 }
 
 void pio_activate (unsigned int pin, bool active) {

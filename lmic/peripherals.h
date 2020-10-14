@@ -70,6 +70,17 @@ void pio_irq_clear (uint32_t mask);
 void pio_irq_enable (unsigned int gpio, bool enable);
 void pio_irq_config (unsigned int pin, bool rising, bool falling);
 
+#ifdef PERIPH_PIO_DIRECT
+void pio_direct_start (unsigned int pin, pio_direct* dpio);
+void pio_direct_stop (pio_direct* dpio);
+void pio_direct_inp (pio_direct* dpio);
+void pio_direct_out (pio_direct* dpio);
+void pio_direct_set (pio_direct* dpio, int value);
+void pio_direct_set0 (pio_direct* dpio);
+void pio_direct_set1 (pio_direct* dpio);
+unsigned int pio_direct_get (pio_direct* dpio);
+#endif
+
 #endif
 
 
