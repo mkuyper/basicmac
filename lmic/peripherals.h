@@ -128,4 +128,19 @@ unsigned int adc_read (unsigned int chnl, unsigned int rate);
 
 #endif
 
+
+#ifdef PERIPH_TMR
+// ------------------------------------------------
+// Timer peripheral
+
+typedef void (*tmr_cb) (void);
+
+void tmr_start (const void* p, uint32_t psc);
+void tmr_stop (const void* p);
+uint32_t tmr_get (const void* p);
+void tmr_run (const void* p, uint32_t count, tmr_cb cb, bool once);
+void tmr_halt (const void* p);
+
+#endif
+
 #endif
