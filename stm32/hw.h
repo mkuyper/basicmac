@@ -255,6 +255,8 @@ extern const void* const tmr_t3;
 
 #define PERIPH_TMR
 
+#define TMR_PSC_MHZ(x)  (((unsigned int) ((32.0 / (x)) + 0.5)) - 1)
+
 #endif
 
 

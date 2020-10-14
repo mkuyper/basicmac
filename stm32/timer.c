@@ -71,6 +71,7 @@ void tmr_stop (const void* p) {
 
     if( (tmr->state->flags & F_ON) != 0 ) {
         tmr->state->flags &= ~F_ON;
+        tmr->timer->CR1 = 0;            // halt timer
         tmr->timer->DIER = 0;           // disable all interrupts
         NVIC_DisableIRQ(tmr->irqn);     // disable interrupt in NVIC
         *tmr->enr &= ~tmr->enb;         // stop peripheral clock
@@ -78,21 +79,36 @@ void tmr_stop (const void* p) {
     }
 }
 
-void tmr_once (const void* p, uint32_t count, tmr_cb cb) {
+void tmr_run (const void* p, uint32_t count, tmr_cb cb, bool once) {
     const tmr_p* tmr = p;
 
     ASSERT((tmr->state->flags & F_ON) != 0);
 
     tmr->state->cb = cb;
 
-    tmr->timer->SR = 0;                 // clear interrupt flags
-    tmr->timer->DIER = TIM_DIER_UIE;    // enable update interrupt
-    NVIC_EnableIRQ(tmr->irqn);          // enable interrupt in NVIC
+    tmr->timer->CNT = 0;                      // reset counter
+    tmr->timer->ARR = count;                  // set auto-reload register
+    tmr->timer->EGR = TIM_EGR_UG;             // refresh registers
 
-    tmr->timer->CNT = 0;                // reset counter
-    tmr->timer->ARR = count;            // set auto-reload register
+    tmr->timer->SR = 0;                       // clear interrupt flags
+    tmr->timer->DIER = cb ? TIM_DIER_UIE : 0; // enable update interrupt
+    NVIC_EnableIRQ(tmr->irqn);                // enable interrupt in NVIC
+
     tmr->timer->CR1 = TIM_CR1_CEN
-        | TIM_CR1_OPM;                  // enable timer, one-shot mode
+        | (once ? TIM_CR1_OPM : 0 );          // enable timer
+}
+
+void tmr_halt (const void* p) {
+    const tmr_p* tmr = p;
+
+    ASSERT((tmr->state->flags & F_ON) != 0);
+
+    tmr->timer->CR1 = 0;                      // halt timer
+}
+
+uint32_t tmr_get (const void* p) {
+    const tmr_p* tmr = p;
+    return tmr->timer->CNT;
 }
 
 static void tmr_irq (const tmr_p* tmr) {
