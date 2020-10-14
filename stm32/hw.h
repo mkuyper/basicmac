@@ -139,8 +139,16 @@ int gpio_transition (int port, int pin, int type, int duration, unsigned int con
 	: 0)
 #endif
 
+typedef struct {
+    GPIO_TypeDef* gpio;
+    uint32_t mask;
+    uint32_t m_out;
+    uint32_t m_inp;
+    int port;
+} pio_direct;
 
 #define PERIPH_PIO
+#define PERIPH_PIO_DIRECT
 #define PIO_IRQ_LINE(gpio)   BRD_PIN(gpio)
 
 
