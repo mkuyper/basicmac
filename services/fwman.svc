@@ -6,7 +6,7 @@
 
 src:
     - fuota/fwman.c
-    - fuota/micro-ecc/uECC.c
+    - micro-ecc/uECC.c
 
 require:
     - frag

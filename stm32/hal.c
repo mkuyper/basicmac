@@ -1,3 +1,4 @@
+// Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
 // Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 // Copyright (C) 2014-2016 IBM Corporation. All rights reserved.
 //
@@ -28,6 +29,9 @@ static struct {
     u4_t ticks;
     int watchcount;
     u4_t reset;
+#ifdef CFG_DEBUG
+    u4_t debug_suspend;
+#endif
 #ifdef CFG_rtstats
     struct {
         uint32_t run;                   // ticks running
@@ -187,10 +191,19 @@ void hal_spi_select (int on) {
 }
 
 // perform SPI transaction with radio
-u1_t hal_spi (u1_t out) {
+static u1_t spi_byte (u1_t out) {
     SPIx->DR = out;
     while( (SPIx->SR & SPI_SR_RXNE ) == 0);
     return SPIx->DR; // in
+}
+
+void hal_spi_transact (const u1_t* txbuf, u1_t txlen, u1_t* rxbuf, u1_t rxlen) {
+    for( int i = 0; i < txlen; i++) {
+        spi_byte(txbuf[i]);
+    }
+    for( int i = 0; i < rxlen; i++) {
+        rxbuf[i] = spi_byte(0);
+    }
 }
 
 
@@ -623,20 +636,15 @@ u4_t hal_ticks () {
 }
 
 // NOTE: interrupts are already be disabled when this HAL function is called!
-u1_t hal_sleep (u1_t type, u4_t targettime) {
+void hal_sleep (u1_t type, u4_t targettime) {
     static const u8_t S_TH[] = {
         0, 6, 190
     };
 
     u8_t xnow = hal_xticks_unsafe();
-    s4_t dt;
-    if( type == HAL_SLEEP_FOREVER ) {
-        dt = sec2osticks(12*60*60); // 12 h
-    } else {
-        dt = (s4_t) targettime - (s4_t) xnow;
-    }
+    s4_t dt = (s4_t) targettime - (s4_t) xnow;
     if( dt <= 0 ) {
-        return 0; // it's time now
+        return; // it's time now
     }
 
     // select sleep type
@@ -671,8 +679,6 @@ u1_t hal_sleep (u1_t type, u4_t targettime) {
     HAL.rtstats.sleep[stype] += (t2 - t1);
     wakeup = t2;
 #endif
-
-    return 1; // we slept
 }
 
 // short-term busy wait
@@ -1029,7 +1035,7 @@ void hal_init (void* bootarg) {
 
     clock_init();
 
-    pd_init();
+    hal_pd_init();
 
 #if 1
     // disable single-wire debug (SWD) when running
@@ -1053,9 +1059,6 @@ void hal_init (void* bootarg) {
     hal_enableIRQs();
 
     leds_init();
-#ifdef BRD_USART
-    usart_init();
-#endif
 #ifdef BRD_VIBE_TIM
     vibe_init();
 #endif
@@ -1087,33 +1090,30 @@ const irqdef HAL_irqdefs[] = {
 #endif
 
 #if defined(BRD_USART)
-#if BRD_USART == 1
-    { USART1_IRQn, usart_irq },
-#elif BRD_USART == BRD_LPUART(1)
-    { LPUART1_IRQn, usart_irq },
+#if BRD_USART_EN(BRD_USART1)
+    { USART1_IRQn, usart1_irq },
+#endif
+#if BRD_USART_EN(BRD_USART2)
+    { USART2_IRQn, usart2_irq },
+#endif
+#if BRD_USART_EN(BRD_LPUART1)
+    { LPUART1_IRQn, lpuart1_irq },
 #endif
 #endif
 
-#if defined(BRD_PWM_TIM)
-#if BRD_PWM_TIM == 3
-    { TIM3_IRQn, pwm_irq },
+#if defined(BRD_TMR)
+#if BRD_TMR_EN(BRD_TIM2)
+    { TIM2_IRQn, tmr_t2_irq },
+#endif
+#if BRD_TMR_EN(BRD_TIM3)
+    { TIM3_IRQn, tmr_t3_irq },
 #endif
 #endif
 
-#if defined(BRD_PIR_TIM)
-#if BRD_PIR_TIM == 3
-    { TIM3_IRQn, pir_tim_irq },
-#endif
-#endif
-
-#if defined(BRD_LED_TIM)
-#if BRD_LED_TIM == 2
-    { TIM2_IRQn, leds_pwm_irq },
-#endif
-#endif
-
-#if defined(BRD_IR_TIM)
-    { TIM2_IRQn, ir_tim_irq },
+#if defined(HW_DMA)
+    { DMA1_Channel1_IRQn, dma_irq },
+    { DMA1_Channel2_3_IRQn, dma_irq },
+    { DMA1_Channel4_5_6_7_IRQn, dma_irq },
 #endif
 
     { ~0, NULL } // end of list
@@ -1134,51 +1134,41 @@ void hal_setBattLevel (u1_t level) {
 
 #ifdef CFG_DEBUG
 
-#if BRD_DBG_UART == 1
-#define DBG_USART USART1
-#define DBG_USART_enable()    do { RCC->APB2ENR |= RCC_APB2ENR_USART1EN; } while (0)
-#define DBG_USART_disable()   do { RCC->APB2ENR &= ~RCC_APB2ENR_USART1EN; } while (0)
-#elif BRD_DBG_UART == 2
-#define DBG_USART USART2
-#define DBG_USART_enable()    do { RCC->APB1ENR |= RCC_APB1ENR_USART2EN; } while (0)
-#define DBG_USART_disable()   do { RCC->APB1ENR &= ~RCC_APB1ENR_USART2EN; } while (0)
-#elif BRD_DBG_UART == 4
-#define DBG_USART USART4
-#define DBG_USART_enable()    do { RCC->APB1ENR |= RCC_APB1ENR_USART4EN; } while (0)
-#define DBG_USART_disable()   do { RCC->APB1ENR &= ~RCC_APB1ENR_USART4EN; } while (0)
-#endif
-#define DBG_USART_WRITE(c)    do { DBG_USART->TDR = (c); } while (0)
-#define DBG_USART_BUSY()      ((DBG_USART->ISR & USART_ISR_TXE) == 0)
-#define DBG_USART_TXING()     ((DBG_USART->ISR & USART_ISR_TC) == 0)
+static void debug_uartconfig (void) {
+    // configure USART (2000000/8N1)
+    usart_start(BRD_DBG_UART, 2000000);
+}
 
 static void debug_init (void) {
-    // configure USART (115200/8N1, tx-only)
-    DBG_USART_enable();
-    DBG_USART->BRR = 16; // 2000000 baud (APB1 clock @32MHz)
-    DBG_USART->CR1 = USART_CR1_UE | USART_CR1_TE; // usart + transmitter enable
-    DBG_USART_disable();
+    debug_uartconfig();
 #if CFG_DEBUG != 0
     debug_str("\r\n============== DEBUG STARTED ==============\r\n");
 #endif
 }
 
 void hal_debug_str (const char* str) {
-    DBG_USART_enable();
-    CFG_PIN_AF(GPIO_DBG_TX, GPIOCFG_OSPEED_40MHz | GPIOCFG_OTYPE_PUPD | GPIOCFG_PUPD_NONE);
-    char c;
-    while( (c = *str++) ) {
-        while( DBG_USART_BUSY() );
-        DBG_USART_WRITE(c);
-    }
-    while( DBG_USART_TXING() );
-    CFG_PIN(GPIO_DBG_TX, GPIOCFG_MODE_INP | GPIOCFG_OSPEED_400kHz | GPIOCFG_OTYPE_OPEN | GPIOCFG_PUPD_PUP);
-    DBG_USART_disable();
+    usart_str(BRD_DBG_UART, str);
 }
 
 void hal_debug_led (int val) {
 #if defined(GPIO_DBG_LED)
     leds_set(GPIO_DBG_LED, val);
 #endif
+}
+
+void hal_debug_suspend (void) {
+    if( HAL.debug_suspend == 0 ) {
+        usart_stop(BRD_DBG_UART);
+    }
+    HAL.debug_suspend += 1;
+}
+
+void hal_debug_resume (void) {
+    ASSERT(HAL.debug_suspend);
+    HAL.debug_suspend -= 1;
+    if( HAL.debug_suspend == 0 ) {
+        debug_uartconfig();
+    }
 }
 
 #endif

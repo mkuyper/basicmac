@@ -1,21 +1,27 @@
+// Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
 // Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 //
 // This file is subject to the terms and conditions defined in file 'LICENSE',
 // which is part of this source code package.
 
-#include "hw.h"
+#include "lmic.h"
 
-static inline void gpio_begin (int port) {
-    unsigned int enr = GPIO_RCC_ENR;
-    if ((enr & GPIO_EN(port)) == 0) {
-        GPIO_RCC_ENR = enr | GPIO_EN(port);
+static unsigned int gpio_on[3];
+
+static void gpio_begin (int port) {
+    if( gpio_on[port] == 0 ) {
+        GPIO_RCC_ENR |= GPIO_EN(port);
         // dummy read as per errata
         (void) GPIOx(port)->IDR;
     }
+    gpio_on[port] += 1;
 }
 
-static inline void gpio_end (int port) {
-    GPIO_RCC_ENR &= ~GPIO_EN(port);
+static void gpio_end (int port) {
+    gpio_on[port] -= 1;
+    if( gpio_on[port] == 0 ) {
+        GPIO_RCC_ENR &= ~GPIO_EN(port);
+    }
 }
 
 void gpio_cfg_pin (int port, int pin, int gpiocfg) {
@@ -96,7 +102,6 @@ void gpio_cfg_extirq (int port, int pin, int irqcfg) {
             (irqcfg == GPIO_IRQ_CHANGE || irqcfg == GPIO_IRQ_FALLING));
 }
 
-
 void gpio_set_extirq (int pin, int on) {
     if (on) {
         EXTI->PR = (1 << pin);
@@ -107,18 +112,92 @@ void gpio_set_extirq (int pin, int on) {
 }
 
 void pio_set (unsigned int pin, int value) {
-    if (value < 0) {
-        gpio_cfg_pin(BRD_PORT(pin), BRD_PIN(pin), 0
-                | (((value & 1) == 0 ? GPIOCFG_PUPD_PUP : 0))
-                | (((value & 2) == 0 ? GPIOCFG_PUPD_PDN : 0))
-                | (((value & 4) == 0 ? GPIOCFG_MODE_ANA : GPIOCFG_MODE_INP)));
-    } else {
+    if( value >= 0 ) {
         gpio_cfg_set_pin(BRD_PORT(pin), BRD_PIN(pin),
                 GPIOCFG_MODE_OUT | GPIOCFG_OSPEED_40MHz | GPIOCFG_OTYPE_PUPD | GPIOCFG_PUPD_NONE,
                 value);
+    } else {
+        int gpiocfg = 0;
+        if( value == PIO_INP_PUP ) {
+            gpiocfg = GPIOCFG_PUPD_PUP;
+        } else if( value == PIO_INP_PDN ) {
+            gpiocfg = GPIOCFG_PUPD_PDN;
+        } else if( value == PIO_INP_PAU ) {
+            if( pin & BRD_GPIO_ACTIVE_LOW ) {
+                gpiocfg = GPIOCFG_PUPD_PUP;
+            } else {
+                gpiocfg = GPIOCFG_PUPD_PDN;
+            }
+        } else if( value == PIO_INP_ANA ) {
+            gpiocfg = GPIOCFG_MODE_ANA;
+        }
+        gpio_cfg_pin(BRD_PORT(pin), BRD_PIN(pin), gpiocfg);
     }
+}
+
+void pio_direct_start (unsigned int pin, pio_direct* dpio) {
+    int port = BRD_PORT(pin);
+    dpio->gpio = GPIOx(port);
+    dpio->mask = 1 << BRD_PIN(pin);
+    dpio->m_out = 0x1 << (BRD_PIN(pin) << 1);
+    dpio->m_inp = ~(0x3 << (BRD_PIN(pin) << 1));
+    dpio->port = port;
+    gpio_begin(port);
+}
+
+void pio_direct_stop (pio_direct* dpio) {
+    gpio_end(dpio->port);
+}
+
+void pio_direct_inp (pio_direct* dpio) {
+    uint32_t r = dpio->gpio->MODER;
+    r &= dpio->m_inp; // clear bits
+    dpio->gpio->MODER = r;
+}
+
+void pio_direct_out (pio_direct* dpio) {
+    uint32_t r = dpio->gpio->MODER;
+    r &= dpio->m_inp; // clear bits
+    r |= dpio->m_out; // set bits
+    dpio->gpio->MODER = r;
+}
+
+void pio_direct_set (pio_direct* dpio, int value) {
+    if( value ) {
+        pio_direct_set1(dpio);
+    } else {
+        pio_direct_set0(dpio);
+    }
+}
+
+void pio_direct_set1 (pio_direct* dpio) {
+    dpio->gpio->BSRR = dpio->mask;
+}
+
+void pio_direct_set0 (pio_direct* dpio) {
+    dpio->gpio->BRR = dpio->mask;
+}
+
+unsigned int pio_direct_get (pio_direct* dpio) {
+    return dpio->gpio->IDR & dpio->mask;
+}
+
+void pio_activate (unsigned int pin, bool active) {
+    pio_set(pin, (pin & BRD_GPIO_ACTIVE_LOW) ? !active : active);
 }
 
 int pio_get (unsigned int pin) {
     return gpio_get_pin(BRD_PORT(pin), BRD_PIN(pin));
+}
+
+bool pio_active (unsigned int pin) {
+    bool v = pio_get(pin);
+    if( (pin & BRD_GPIO_ACTIVE_LOW) ) {
+        v = !v;
+    }
+    return v;
+}
+
+void pio_default (unsigned int pin) {
+    pio_set(pin, PIO_INP_ANA);
 }

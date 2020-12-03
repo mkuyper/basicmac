@@ -1,90 +1,189 @@
-# Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
+# Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
 #
 # This file is subject to the terms and conditions defined in file 'LICENSE',
 # which is part of this source code package.
 
-from typing import Optional,Set
+from typing import Any, List, Optional, Set
 
 import asyncio
-import itertools
+import ctypes
 import random
-import struct
 
-class PeripheralsUtil:
-    @staticmethod
-    def setbits(v:int, mask:int, on:bool=True) -> int:
-        return v | mask if on else v & ~mask
+from uuid import UUID
 
-class InterruptController:
-    def __init__(self, ev:'SimEvent') -> None:
-        self.ev = ev
-        self.irq = 0
-
-    def set(self, line:int) -> None:
-        self.irq |= (1 << line)
-        if self.irq:
-            self.ev.set('irq')
-
-    def clear(self, line:int) -> None:
-        self.irq &= ~(1 << line)
-        if self.irq == 0:
-            self.ev.clear('irq')
-
-    def next(self) -> int:
-        if self.irq:
-            for i in itertools.count():
-                if (self.irq & (1 << i)):
-                    return i
-        raise RuntimeError('No IRQ lines asserted')
+from device import IrqHandler, Peripheral, Peripherals, Simulation
+from medium import LoraMsg, LoraMsgReceiver, LoraMsgTransmitter, Medium
+from runtime import Clock, Job, Runtime
 
 
-class GPIO:
-    def __init__(self, ic:InterruptController, line:int) -> None:
-        self.ic   = ic
-        self.line = line
-        self.reset()
-        self.watchers:Set[asyncio.Event] = set()
+# -----------------------------------------------------------------------------
+# Peripheral: NVIC
 
-    def reset(self) -> None:
-                       # high  low  inp  ana
-        self.cfg1 = 0  #    1    1    0    0
-        self.cfg2 = 0  #    1    0    1    0
-        self.pup  = 0  # pull-up
-        self.pdn  = 0  # pull-down
-        self.rise = 0  # rising edge irq
-        self.fall = 0  # falling edge irq
+@Peripherals.add
+class NVIC(Peripheral, IrqHandler):
+    uuid = UUID('439a2c60-ac1b-11ea-99f0-d1119d1d4e55')
 
+    @Peripherals.register
+    class NVICRegister(ctypes.LittleEndianStructure):
+        _fields_ = [('vtor', ctypes.c_uint32 * 128), ('prio', ctypes.c_ubyte * 128)]
+
+    def init(self) -> None:
+        self.reg = NVIC.NVICRegister()
+        self.sim.map_peripheral(self.pid, self.reg)
+        self.sim.irqhandler = self
+
+        self.reqs:Set[int] = set()
+        self.cprio:List[int] = [-1]
+
+    def requested(self) -> bool:
+        return bool(self.reqs)
+
+    def handler(self) -> Optional[int]:
+        assert bool(self.reqs)
+        pid = sorted(self.reqs, key=lambda x: self.reg.prio[x], reverse=True)[0]
+        prio = self.reg.prio[pid]
+        if prio <= self.cprio[-1]:
+            return None
+        self.cprio.append(prio)
+        return int(self.reg.vtor[pid])
+
+    def done(self) -> None:
+        p = self.cprio.pop()
+        assert p != -1
+
+    def set(self, pid:int) -> None:
+        assert pid < 128
+        self.reqs.add(pid)
+        self.sim.running.set()
+
+    def clear(self, pid:int) -> None:
+        assert pid < 128
+        self.reqs.discard(pid)
+
+
+# -----------------------------------------------------------------------------
+# Peripheral: Debug
+
+@Peripherals.add
+class DebugUnit(Peripheral):
+    uuid = UUID('4c25d84a-9913-11ea-8de8-23fb8fc027a4')
+
+    @Peripherals.register
+    class DebugRegister(ctypes.LittleEndianStructure):
+        _fields_ = [('n', ctypes.c_uint32), ('s', ctypes.c_ubyte * 1024)]
+
+    def init(self) -> None:
+        self.reg = DebugUnit.DebugRegister()
+        self.sim.map_peripheral(self.pid, self.reg)
+
+    def svc(self, fid:int) -> None:
+        assert fid == 0
+        self.sim.log(bytes(self.reg.s[:self.reg.n]).decode('utf-8'))
+
+
+# -----------------------------------------------------------------------------
+# Peripheral: Timer
+
+@Peripherals.add
+class Timer(Peripheral, Clock):
+    uuid = UUID('20c98436-994e-11ea-8de8-23fb8fc027a4')
+
+    TICKS_PER_SEC = 32768
+
+    @Peripherals.register
+    class TimerRegister(ctypes.LittleEndianStructure):
+        _fields_ = [('ticks', ctypes.c_uint64), ('target', ctypes.c_uint64)]
+
+    def init(self) -> None:
+        self.epoch = asyncio.get_running_loop().time()
+        self.reg = Timer.TimerRegister()
+        self.sim.map_peripheral(self.pid, self.reg)
+        self.sim.prerunhooks.append(self.update)
+        self.sim.runtime.setclock(self)
+        self.th:Optional[asyncio.TimerHandle] = None
+        self.update()
+
+    def update(self) -> None:
+        self.reg.ticks = self.time2ticks(asyncio.get_running_loop().time())
+
+    def time(self, update:bool=False) -> float:
+        return self.ticks2time(self.ticks(update))
+
+    def ticks(self, update:bool=False) -> int:
+        if update:
+            self.update()
+        return int(self.reg.ticks)
+
+    def ticks2time(self, ticks:int) -> float:
+        return self.epoch + (ticks / Timer.TICKS_PER_SEC)
+
+    def time2ticks(self, time:float) -> int:
+        return int((time - self.epoch) * Timer.TICKS_PER_SEC)
+
+    def sec2ticks(self, sec:float) -> int:
+        return round(sec * Timer.TICKS_PER_SEC)
+
+    def cancel(self) -> None:
+        if self.th is not None:
+            self.th.cancel()
+            self.th = None
+
+    def alarm(self) -> None:
+        self.sim.running.set()
+
+    def svc(self, fid:int) -> None:
+        assert fid == 0
+        self.cancel()
+        self.th = asyncio.get_running_loop().call_at(
+                self.epoch + (self.reg.target / Timer.TICKS_PER_SEC), self.alarm)
+
+
+# -----------------------------------------------------------------------------
+# Peripheral: GPIO
+
+@Peripherals.add
+class GPIO(Peripheral):
+    uuid = UUID('76d5885a-ff99-11ea-9aa3-cd4b514dc224')
+
+    @Peripherals.register
+    class GPIORegister(ctypes.LittleEndianStructure):
+        _fields_ = [(r, ctypes.c_uint32) for r in ('value', 'outm', 'outv', 'pdn', 'pup', 'rise', 'fall', 'irq')]
+
+    def init(self) -> None:
+        self.reg = GPIO.GPIORegister()
+        self.sim.map_peripheral(self.pid, self.reg)
+
+        # external interface
         self.inpm = 0  # connected input
         self.inpv = 0  # input value
-
-        self.val  = 0  # calculated value
-        self.irq  = 0  # pending irq
-
         self.epup = 0  # external pull-up
         self.epdn = 0  # external pull-down
 
-        self.ic.clear(self.line)
+        self.watchers:Set[asyncio.Event] = set()
 
-    def read_irq(self) -> int:
-        return self.irq
-
-    def clear_irq(self, mask:int) -> None:
-        self.irq &= ~mask
-        if self.irq == 0:
-            self.ic.clear(self.line)
-
-    def read(self) -> int:
-        return self.val
-
-    def __getitem__(self, pio:int) -> bool:
-        return bool(self.val & (1 << pio))
-
-    def config(self, config:bytes) -> None:
-        (self.cfg1, self.cfg2, self.pup, self.pdn,
-                self.rise, self.fall) = struct.unpack('<IIIIII', config)
+    def extconfig(self, pio:int, *, pullup:bool=False, pulldn:bool=False) -> None:
+        mask = (1 << pio)
+        if pullup:
+            self.epup |= mask
+        else:
+            self.epup &= ~mask
+        if pulldn:
+            self.epdn |= mask
+        else:
+            self.epdn &= ~mask
         self.update()
 
-    def drive(self, pio:int, value:Optional[int]) -> None:
+    async def waitfor(self, pio:int, lvl:bool) -> None:
+        mask = (1 << pio)
+        if (not not (self.reg.value & mask)) != lvl:
+            ev = asyncio.Event()
+            self.watchers.add(ev)
+            while (not not (self.reg.value & mask)) != lvl:
+                await ev.wait()
+                ev.clear()
+            self.watchers.remove(ev)
+
+    def drive(self, pio:int, value:Optional[bool]) -> None:
         mask = (1 << pio)
         if value is None:
             self.inpm &= ~mask
@@ -96,127 +195,146 @@ class GPIO:
             self.inpm |= mask
         self.update()
 
-    def extconfig(self, pio:int, epup:bool=False, epdn:bool=False) -> None:
-        mask = (1 << pio)
-        if epup:
-            self.epup |= mask
-        else:
-            self.epup &= ~mask
-        if epdn:
-            self.epdn |= mask
-        else:
-            self.epdn &= ~mask
-
-    async def waitfor(self, line:int, lvl:bool) -> None:
-        mask = 1 << line
-        if (not not (self.val & mask)) != lvl:
-            ev = asyncio.Event()
-            self.watchers.add(ev)
-            while (not not (self.val & mask)) != lvl:
-                await ev.wait()
-                ev.clear()
-            self.watchers.remove(ev)
-
     def update(self) -> None:
-        if self.cfg1 & self.inpm:
-            raise RuntimeError('GPIO short circuit!')
-        pval = self.val
-        self.val = ((self.cfg1 & self.cfg2)
-                | ((~self.cfg1 & self.cfg2)
-                    & ((self.inpm & self.inpv) | (~self.inpm & (self.pup | self.epup)) |
-                        ((~self.inpm & ~self.pdn & ~self.epdn) & random.getrandbits(32)))))
-        cval = pval ^ self.val
+        if self.reg.outm & self.inpm:
+            raise RuntimeError(f'GPIO short circuit: {bin(self.reg.outm & self.inpm)}')
+
+        val  = self.reg.pup | self.epup # pull-ups
+        val |= random.getrandbits(32) & (~self.reg.pdn & ~self.epdn) # floaters
+        val &= ~(self.reg.outm | self.inpm) # mask out driven pins
+        val |= self.reg.outm & self.reg.outv # internally driven
+        val |= self.inpm & self.inpv # externally driven
+
+        cval = self.reg.value ^ val
+        self.reg.value = val
+
         if cval:
-            self.irq |= ((self.rise & cval & self.val)
-                    | (self.fall & cval & ~self.val))
-            if self.irq:
-                self.ic.set(self.line)
+            self.reg.irq |= ((self.reg.rise & cval & val) | (self.reg.fall & cval & ~val))
             for e in self.watchers:
                 e.set()
 
-class UART:
-    def __init__(self, ic:InterruptController, line:int) -> None:
-        self.ic   = ic
-        self.line = line
-        self.buf  = asyncio.Queue() # type: asyncio.Queue[int]
-        self.reset()
-
-    SR_RXE = (1 << 0)
-    SR_TXE = (1 << 1)
-    SR_RXR = (1 << 2)
-    SR_TXR = (1 << 3)
-    SR_OVR = (1 << 4)
-
-    def reset(self) -> None:
-        self.sr = 0
-        self.rx = 0
-        self.tx = 0
-        self.config()
-        self.irq_update()
-
-    def setrx(self, on:bool) -> None:
-        self.sr = PeripheralsUtil.setbits(self.sr, UART.SR_RXE, on)
-        self.irq_update()
-
-    def settx(self, on:bool) -> None:
-        self.sr = PeripheralsUtil.setbits(self.sr, UART.SR_TXE | UART.SR_TXR, on)
-        self.irq_update()
-
-    def config(self, br:int=9600, db:int=8, sb:int=1, par:int=0) -> None:
-        self.ctime = (1 + db + sb + (not not par)) / br
-
-    def irq_update(self) -> None:
-        mask = UART.SR_RXR
-        if self.sr & UART.SR_TXE:
-            mask |= UART.SR_TXR
-        if self.sr & mask:
-            self.ic.set(self.line)
+        if self.reg.irq:
+            self.sim.irqhandler.set(self.pid)
         else:
-            self.ic.clear(self.line)
+            self.sim.irqhandler.clear(self.pid)
 
-    def rx_char(self, ch:int) -> None:
-        if self.sr & self.SR_RXR:
-            self.sr |= UART.SR_OVR
+    def svc(self, fid:int) -> None:
+        assert fid == 0
+        self.update()
+
+
+# -----------------------------------------------------------------------------
+# Peripheral: Fast UART
+
+@Peripherals.add
+class FastUART(Peripheral):
+    uuid = UUID('a806819e-0134-11eb-a845-f739a072dd5c')
+
+    C_RXEN = (1 << 0)
+
+    @Peripherals.register
+    class FastUARTRegister(ctypes.LittleEndianStructure):
+        _fields_ = [*[(r, ctypes.c_ubyte*1024) for r in ('txbuf', 'rxbuf')], *[(r, ctypes.c_uint32) for r in ('ctrl', 'rxlen', 'txlen')]]
+
+    def init(self) -> None:
+        self.reg = FastUART.FastUARTRegister()
+        self.sim.map_peripheral(self.pid, self.reg)
+        self.event = asyncio.Event()
+
+    # receive from device
+    async def recv(self, *, timeout:Optional[float]=None) -> Optional[bytes]:
+        self.event.clear()
+        try:
+            await asyncio.wait_for(self.event.wait(), timeout=timeout)
+        except asyncio.TimeoutError:
+            return None
+        return bytes(self.reg.txbuf[:self.reg.txlen])
+
+    # send to device
+    def send(self, data:bytes) -> None:
+        if self.reg.ctrl & FastUART.C_RXEN:
+            self.reg.rxbuf[:len(data)] = data
+            self.reg.rxlen = len(data)
+            self.sim.irqhandler.set(self.pid)
+
+    def svc_send(self) -> None:
+        self.event.set()
+
+    def svc_clearirq(self) -> None:
+        self.sim.irqhandler.clear(self.pid)
+
+    svc_lookup = {
+            0: svc_send,
+            1: svc_clearirq,
+            }
+
+    def svc(self, fid:int) -> None:
+        FastUART.svc_lookup[fid](self)
+
+
+# -----------------------------------------------------------------------------
+# Peripheral: Radio
+
+@Peripherals.add
+class Radio(Peripheral):
+    uuid = UUID('3888937c-ab4c-11ea-aeed-27009b59e638')
+
+    S_IDLE   = 0
+    S_BUSY   = 1
+    S_TXDONE = 2
+    S_RXDONE = 3
+    S_RXTOUT = 4
+
+    @Peripherals.register
+    class RadioRegister(ctypes.LittleEndianStructure):
+        _fields_ = [('buf', ctypes.c_ubyte*256), ('xtime', ctypes.c_uint64), *[(r, ctypes.c_uint32) for r in ('plen', 'freq', 'rps', 'xpow', 'rssi', 'snr', 'npreamble', 'status')]]
+
+    def init(self) -> None:
+        self.reg = Radio.RadioRegister()
+        self.sim.map_peripheral(self.pid, self.reg)
+        self.medium:Medium = self.sim.context.get('medium', Medium())
+        self.rcvr = LoraMsgReceiver(self.sim.runtime, self.medium, cb=self.rxdone)
+        self.xmtr = LoraMsgTransmitter(self.sim.runtime, self.medium, cb=self.txdone)
+
+    def txdone(self, msg:LoraMsg) -> None:
+        self.reg.status = Radio.S_TXDONE
+        self.reg.xtime = self.sim.runtime.clock.time2ticks(msg.xend)
+        self.sim.irqhandler.set(self.pid)
+
+    def rxdone(self, msg:Optional[LoraMsg]) -> None:
+        if msg:
+            self.reg.status = Radio.S_RXDONE
+            self.reg.xtime = self.sim.runtime.clock.time2ticks(msg.xend)
+            self.reg.buf[:len(msg.pdu)] = msg.pdu
+            self.reg.plen = len(msg.pdu)
+            pass
         else:
-            self.sr |= UART.SR_RXR
-            self.rx = ch
-        self.irq_update()
+            self.reg.status = Radio.S_RXTOUT
+            self.reg.xtime = self.sim.runtime.clock.ticks(update=True)
+        self.sim.irqhandler.set(self.pid)
 
-    def read_rx(self) -> int:
-        ch = self.rx
-        self.sr &= ~(UART.SR_RXR | UART.SR_OVR)
-        self.irq_update()
-        return ch
+    def svc_reset(self) -> None:
+        pass
 
-    async def _tx_char(self) -> None:
-        await asyncio.sleep(self.ctime)
-        sr = self.sr
-        if sr & UART.SR_TXE:
-            await self.buf.put(self.tx)
-            self.sr = sr | UART.SR_TXR
-            self.irq_update()
+    def svc_clearirq(self) -> None:
+        self.sim.irqhandler.clear(self.pid)
 
-    def tx_char(self, ch:int) -> None:
-        sr = self.sr
-        if sr & UART.SR_TXE:
-            if sr & UART.SR_TXR:
-                self.sr = sr & ~UART.SR_TXR
-                self.tx = ch
-            else:
-                self.sr = sr | UART.SR_OVR
-                self.tx = random.getrandbits(8)
-            self.irq_update()
-            asyncio.ensure_future(self._tx_char())
+    def svc_rx(self) -> None:
+        t = self.sim.runtime.clock.ticks2time(self.reg.xtime)
+        self.rcvr.receive(t, self.reg.freq, self.reg.rps, minsyms=self.reg.npreamble)
 
-    async def xfr_todevice(self, data:bytes) -> None:
-        for ch in data:
-            sr0 = self.sr
-            await asyncio.sleep(self.ctime)
-            if (self.sr & sr0) & UART.SR_RXE:
-                self.rx_char(ch)
+    def svc_tx(self) -> None:
+        now = self.sim.runtime.clock.time()
+        msg = LoraMsg(now, bytes(self.reg.buf[:self.reg.plen]), self.reg.freq, self.reg.rps,
+                xpow=self.reg.xpow, npreamble=self.reg.npreamble, src=self)
+        self.xmtr.transmit(msg)
 
-    async def xfr_fromdevice(self, n:int) -> bytes:
-        ba = bytearray(n)
-        for i in range(n):
-            ba[i] = await self.buf.get()
-        return ba
+    svc_lookup = {
+            0: svc_reset,
+            1: svc_tx,
+            2: svc_rx,
+            3: svc_clearirq,
+            }
+
+    def svc(self, fid:int) -> None:
+        Radio.svc_lookup[fid](self)

@@ -12,7 +12,7 @@
 #include "bootloader.h"
 
 #include "lwmux/lwmux.h"
-#include "fuota/micro-ecc/uECC.h"
+#include "micro-ecc/uECC.h"
 
 #include "frag.h"
 

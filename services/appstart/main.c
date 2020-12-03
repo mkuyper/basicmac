@@ -22,8 +22,8 @@ static void initfunc (osjob_t* job) {
     debug_printf("id: %E | sn: %.16s | hw: 0x%03x | flash: %dK\r\n",
             eui, hal_serial(), hal_hwid(), fwi.flashsz >> 10);
     debug_printf("bl: v%d | fw: %s %s 0x%08x 0x%08x | boot: %s\r\n",
-            fwi.blversion,
-            PROJECT, VARIANT, fwi.version, fwi.crc,
+	    fwi.blversion,
+	    PROJECT_STR, VARIANT_STR, fwi.version, fwi.crc,
 #if 0
             (BOOT_DEVINFO->bootmode == TABS_BOOT_UFT) ? "uft" :
             (BOOT_DEVINFO->bootmode == TABS_BOOT_SHIPPING) ? "ship" :

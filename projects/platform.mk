@@ -66,7 +66,6 @@ ifeq ($(MCU),unicorn)
     LD_SCRIPTS	+= $(HALDIR)/fw.ld
     ALL		+= $(BUILDDIR)/$(PROJECT).hex
     LOAD	 = dummy
-    OBJS_BLACKLIST += radio.o
 endif
 
 

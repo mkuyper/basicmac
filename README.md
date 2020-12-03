@@ -1,9 +1,19 @@
 # BasicMAC
 
-BasicMAC is a portable implementation of the LoRa™ Alliance's LoRaWAN™
-specification in the C programming language. It is a fork of IBM's LMiC
-library, and supports multiple regions, which are selectable at compile and/or
-run time. It can handle Class A, Class B, and Class C devices.
+[Basic MAC](https://basicmac.io) is a portable implementation of the LoRa
+Alliance®'s LoRaWAN® specification in the C programming language. It is a fork
+of IBM's LMiC library, and supports multiple regions, which are selectable at
+compile and/or run time. It can handle Class A, Class B, and Class C devices.
+
+#### Status
+Branch | Travis CI
+-------|----------
+[`master`](https://github.com/mkuyper/basicmac/tree/master) | [![Build Status](https://travis-ci.com/mkuyper/basicmac.svg?branch=master)](https://travis-ci.com/mkuyper/basicmac)
+
+#### Getting Started
+
+View the [Getting Started Guide](https://basicmac.io/guide/gettingstarted.html).
+
 
 ## This repository
 This repository contains an Arduino port of the BasicMAC library.
@@ -129,3 +139,17 @@ Additionally the pinmap was significantly changed, so look at one of the
 current examples to see how that looks now.
 
 [migrate-examples]: https://github.com/LacunaSpace/basicmac/commit/1505722c912c8cb0cfff2e18b115f9f2c1a62d0f
+=======
+[Basic MAC](https://basicmac.io) is a portable implementation of the LoRa
+Alliance®'s LoRaWAN® specification in the C programming language. It is a fork
+of IBM's LMiC library, and supports multiple regions, which are selectable at
+compile and/or run time. It can handle Class A, Class B, and Class C devices.
+
+#### Status
+Branch | Travis CI
+-------|----------
+[`master`](https://github.com/mkuyper/basicmac/tree/master) | [![Build Status](https://travis-ci.com/mkuyper/basicmac.svg?branch=master)](https://travis-ci.com/mkuyper/basicmac)
+
+#### Getting Started
+
+View the [Getting Started Guide](https://basicmac.io/guide/gettingstarted.html).

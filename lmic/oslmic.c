@@ -173,62 +173,37 @@ void os_setTimedCallbackEx (osjob_t* job, ostime_t time, osjobcb_t cb, unsigned 
 #endif // DEBUG_JOBS
 }
 
-// execute 1 job from timer or run queue, or sleep if nothing is pending
 void os_runstep (void) {
-    osjob_t* j = NULL;
-    hal_disableIRQs();
     // check for runnable jobs
-    if (OS.scheduledjobs) {
-        //debug_verbose_printf("Sleeping until job %u, cb %u, deadline %t\r\n", (unsigned)OS.scheduledjobs, (unsigned)OS.scheduledjobs->func, (ostime_t)OS.scheduledjobs->deadline);
-        if (hal_sleep(OS.exact ? HAL_SLEEP_EXACT : HAL_SLEEP_APPROX, OS.scheduledjobs->deadline) == 0) {
-            j = OS.scheduledjobs;
-            OS.scheduledjobs = j->next;
-            if ((j->flags & OSJOB_FLAG_APPROX) == 0) {
-                OS.exact -= 1;
-            }
-        }
-    } else { // nothing pending
-        //debug_verbose_printf("Sleeping forever\r\n");
-        hal_sleep(HAL_SLEEP_FOREVER, 0);
-    }
-    if( j == NULL || (j->flags & OSJOB_FLAG_IRQDISABLED) == 0) {
-        hal_enableIRQs();
-    }
-    if (j) { // run job callback
-#ifdef CFG_warnjobs
-        // warn about late execution of precisely timed jobs
-        ostime_t delta = 0;
-        if ( (j->flags & (OSJOB_FLAG_NOW | OSJOB_FLAG_APPROX) ) == 0) {
-            delta = os_getTime() - j->deadline;
-        }
-#endif
-        // Only print when interrupts are enabled, some Arduino cores do
-        // not handle printing with IRQs disabled
-        if( (j->flags & OSJOB_FLAG_IRQDISABLED) == 0) {
+    hal_disableIRQs();
+    ostime_t now = os_getTime();
+    osjob_t* j = OS.scheduledjobs;
+    ostime_t deadline;
+    if( j ) {
+        deadline = j->deadline;
+        if( (deadline - now) <= 0 ) {
+	    OS.scheduledjobs = j->next; // de-queue
+            if( (j->flags & OSJOB_FLAG_IRQDISABLED) == 0) {
+                hal_enableIRQs();
 #ifdef DEBUG_JOBS
-            debug_verbose_printf("Running job %u, cb %u, deadline %t\r\n", (unsigned)j, (unsigned)j->func, (ostime_t)j->deadline);
-#endif // DEBUG_JOBS
-#ifdef CFG_warnjobs
-            if ( delta > 1 ) {
-                debug_printf("WARNING: job 0x%08x (func 0x%08x) executed %d ticks late\r\n", j, j->func, delta);
-            }
+                debug_verbose_printf("Running job 0x%08x, cb 0x%08x, deadline %t\r\n",
+                        (unsigned int) j, (unsigned int) j->func, (ostime_t)j->deadline);
 #endif
-        }
-        hal_watchcount(30); // max 60 sec
-        j->func(j);
-        hal_watchcount(0);
-        // If we could not print before, at least print after
-        if( (j->flags & OSJOB_FLAG_IRQDISABLED) != 0) {
+            }
+            hal_watchcount(30); // max 60 sec XXX
+            j->func(j);
+            hal_watchcount(0);
 #ifdef DEBUG_JOBS
-            debug_verbose_printf("Ran job %u, cb %u, deadline %F\r\n", (unsigned)j, (unsigned)j->func, (ostime_t)j->deadline, 0);
-#endif // DEBUG_JOBS
-#ifdef CFG_warnjobs
-            if ( delta > 1 ) {
-                debug_printf("WARNING: job 0x%08x (func 0x%08x) executed %d ticks late\r\n", j, j->func, delta);
-            }
+            debug_verbose_printf("Ran job 0x%08x, cb 0x%08x, deadline %t\r\n",
+                    (unsigned int) j, (unsigned int) j->func, (ostime_t)j->deadline);
 #endif
+            return;
         }
+    } else {
+        deadline = now + 0x7fffff00;
     }
+    hal_sleep(OS.exact ? HAL_SLEEP_EXACT : HAL_SLEEP_APPROX, deadline);
+    hal_enableIRQs();
 }
 
 // execute jobs from timer and from run queue

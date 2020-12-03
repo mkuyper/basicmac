@@ -1,3 +1,4 @@
+// Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
 // Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 //
 // This file is subject to the terms and conditions defined in file 'LICENSE',
@@ -53,19 +54,26 @@
 #define GPIO_MISO       BRD_GPIO_AF(PORT_A, 6, 0)
 #define GPIO_MOSI       BRD_GPIO_AF(PORT_A, 7, 0)
 
-#define GPIO_BOOT_LED   BRD_GPIO(PORT_A, 5) // -- LED is shared with SCK!!
+// Enabled USART peripherals
+#define BRD_USART       (BRD_LPUART1 | BRD_USART2)
+
+// LPUART1
+#define BRD_LPUART1_DMA  BRD_DMA_CHANS(2,3)
+#define GPIO_LPUART1_TX  BRD_GPIO_AF(PORT_C, 4, 2)
+#define GPIO_LPUART1_RX  BRD_GPIO_AF(PORT_C, 5, 2)
+
+// USART2
+#define BRD_USART2_DMA  BRD_DMA_CHANS(4,5)
+#define GPIO_USART2_TX  BRD_GPIO_AF(PORT_A, 2, 4)
+#define GPIO_USART2_RX  BRD_GPIO_AF(PORT_A, 3, 4)
+
+// Debug LED / USART
 //#define GPIO_DBG_LED  BRD_GPIO(PORT_A, 5) // -- LED is shared with SCK!!
-#define GPIO_DBG_TX     BRD_GPIO_AF(PORT_A, 2, 4)
-#define GPIO_DBG_RX     BRD_GPIO_AF(PORT_A, 3, 4)
-#define BRD_DBG_UART    2
+#define BRD_DBG_UART    BRD_USART2_PORT
 
-#define GPIO_PERSO_TX   BRD_GPIO_AF(PORT_A, 2, 4)
-#define GPIO_PERSO_RX   BRD_GPIO_AF(PORT_A, 3, 4)
-#define BRD_PERSO_UART  2
-
-#define BRD_USART       BRD_LPUART(1)
-#define GPIO_USART_TX   BRD_GPIO_AF(PORT_C, 4, 2)
-#define GPIO_USART_RX   BRD_GPIO_AF(PORT_C, 5, 2)
+// Personalization UART
+#define BRD_PERSO_UART  BRD_USART2_PORT
+#define GPIO_PERSO_DET  GPIO_USART2_RX
 
 // power consumption
 
@@ -107,6 +115,8 @@
 #define GPIO_LED3       BRD_GPIO(PORT_B, 6) // blu
 #define GPIO_LED4       BRD_GPIO(PORT_B, 7) // red
 
+#define GPIO_BUTTON     BRD_GPIO_EX(PORT_B, 2, BRD_GPIO_ACTIVE_LOW)
+
 // button PB2
 
 #define BRD_sx1276_radio
@@ -119,14 +129,26 @@
 #define GPIO_MISO       BRD_GPIO_AF(PORT_A, 6, 0)
 #define GPIO_MOSI       BRD_GPIO_AF(PORT_A, 7, 0)
 
-#define GPIO_DBG_LED    GPIO_LED4
-#define GPIO_DBG_TX     BRD_GPIO_AF(PORT_A, 2, 4)
-#define GPIO_DBG_RX     BRD_GPIO_AF(PORT_A, 3, 4)
-#define BRD_DBG_UART    2
+// Enabled USART peripherals
+#define BRD_USART       (BRD_USART1 | BRD_USART2)
 
-#define BRD_USART       1
-#define GPIO_USART_TX   BRD_GPIO_AF(PORT_A, 9, 4)
-#define GPIO_USART_RX   BRD_GPIO_AF(PORT_A, 10, 4)
+// USART1
+#define BRD_USART1_DMA  BRD_DMA_CHANS(2,3)
+#define GPIO_USART1_TX  BRD_GPIO_AF(PORT_A,  9, 4)
+#define GPIO_USART1_RX  BRD_GPIO_AF(PORT_A, 10, 4)
+
+// USART2
+#define BRD_USART2_DMA  BRD_DMA_CHANS(4,5)
+#define GPIO_USART2_TX  BRD_GPIO_AF(PORT_A, 2, 4)
+#define GPIO_USART2_RX  BRD_GPIO_AF(PORT_A, 3, 4)
+
+// Debug LED / USART
+#define GPIO_DBG_LED    GPIO_LED4
+#define BRD_DBG_UART    BRD_USART2_PORT
+
+// Personalization UART
+#define BRD_PERSO_UART  BRD_USART2_PORT
+#define GPIO_PERSO_DET  GPIO_BUTTON
 
 // power consumption
 

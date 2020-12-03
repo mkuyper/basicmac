@@ -1,3 +1,4 @@
+// Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
 // Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 // Copyright (C) 2014-2016 IBM Corporation. All rights reserved.
 //
@@ -138,8 +139,16 @@ int gpio_transition (int port, int pin, int type, int duration, unsigned int con
         : 0)
 #endif
 
+typedef struct {
+    GPIO_TypeDef* gpio;
+    uint32_t mask;
+    uint32_t m_out;
+    uint32_t m_inp;
+    int port;
+} pio_direct;
 
 #define PERIPH_PIO
+#define PERIPH_PIO_DIRECT
 #define PIO_IRQ_LINE(gpio)   BRD_PIN(gpio)
 
 
@@ -212,17 +221,50 @@ int gpio_transition (int port, int pin, int type, int duration, unsigned int con
 #define PERIPH_I2C
 
 
-// ------------------------------------------------
+//////////////////////////////////////////////////////////////////////
 // USART
+//////////////////////////////////////////////////////////////////////
+
+#if defined(BRD_USART)
+
+#if BRD_USART_EN(BRD_USART1)
+void usart1_irq (void);
+extern const void* const usart_port_u1;
+#endif
+#if BRD_USART_EN(BRD_USART2)
+void usart2_irq (void);
+extern const void* const usart_port_u2;
+#endif
+#if BRD_USART_EN(BRD_LPUART1)
+void lpuart1_irq (void);
+extern const void* const usart_port_lpu1;
+#endif
 
 #define PERIPH_USART
+#define HW_DMA
 
-#if (BRD_USART & BRD_LPUART(0)) == 0
-#define USART_BR_9600   0xd05
-#define USART_BR_115200 0x116
-#else
-#define USART_BR_9600   0xd0555
-#define USART_BR_115200 0x115c7
+#endif
+
+
+//////////////////////////////////////////////////////////////////////
+// Timer
+//////////////////////////////////////////////////////////////////////
+
+#if defined(BRD_TMR)
+
+#if BRD_TMR_EN(BRD_TIM2)
+void tmr_t2_irq (void);
+extern const void* const tmr_t2;
+#endif
+#if BRD_TMR_EN(BRD_TIM3)
+void tmr_t3_irq (void);
+extern const void* const tmr_t3;
+#endif
+
+#define PERIPH_TMR
+
+#define TMR_PSC_MHZ(x)  (((unsigned int) ((32.0 / (x)) + 0.5)) - 1)
+
 #endif
 
 
@@ -339,6 +381,47 @@ void ir_tim_irq (void);
 
 #if defined(STM32L072xx)
 #define PERIPH_TRNG
+#endif
+
+
+//////////////////////////////////////////////////////////////////////
+// DMA
+//////////////////////////////////////////////////////////////////////
+
+#ifdef HW_DMA
+
+enum {
+    DMA_ADC     = 0,
+    DMA_SPI1    = 1,
+    DMA_SPI2    = 2,
+    DMA_USART1  = 3,
+    DMA_USART2  = 4,
+    DMA_LPUART1 = 5,
+    DMA_I2C1    = 6,
+    DMA_I2C2    = 7,
+    DMA_TIM2    = 8,
+    DMA_TIM6    = 9,
+    DMA_TIM4    = 10,
+    DMA_AES     = 11,
+    DMA_USART4  = 12,
+    DMA_USART5  = 13,
+    DMA_I2C3    = 14,
+    DMA_TIM7    = 15,
+
+    DMA_NONE    = 255,
+};
+enum {
+    DMA_CB_HALF     = (1 << 0),
+    DMA_CB_COMPLETE = (1 << 1),
+};
+typedef void (*dma_cb) (int status, void* arg);
+void dma_config (unsigned int ch, unsigned int peripheral, unsigned int ccr, unsigned int flags, dma_cb callback, void* arg);
+int dma_deconfig (unsigned int ch);
+void dma_transfer (unsigned int ch, volatile void* paddr, void* maddr, int n);
+int dma_remaining (unsigned int ch);
+
+void dma_irq (void);
+
 #endif
 
 

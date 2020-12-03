@@ -1,3 +1,4 @@
+// Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
 // Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 // Copyright (C) 2014-2016 IBM Corporation. All rights reserved.
 //
@@ -178,28 +179,30 @@ static struct {
 // ----------------------------------------
 
 static void writecmd (uint8_t cmd, const uint8_t* data, uint8_t len) {
+    uint8_t buf[1+len];
+    buf[0] = cmd;
+    memcpy(buf+1, data, len);
+
     hal_spi_select(1);
     hal_pin_busy_wait();
     state.sleeping = 0;
-    hal_spi(cmd);
-    for (u1_t i = 0; i < len; i++) {
-        hal_spi(data[i]);
-    }
+    hal_spi_transact(buf, 1+len, NULL, 0);
     hal_spi_select(0);
     // busy line will go high after max 600ns
     // eventually during a subsequent hal_spi_select(1)...
 }
 
 static void WriteRegs (uint16_t addr, const uint8_t* data, uint8_t len) {
+    uint8_t buf[3+len];
+    buf[0] = CMD_WRITEREGISTER;
+    buf[1] = addr >> 8;
+    buf[2] = addr;
+    memcpy(buf+3, data, len);
+
     hal_spi_select(1);
     hal_pin_busy_wait();
     state.sleeping = 0;
-    hal_spi(CMD_WRITEREGISTER);
-    hal_spi(addr >> 8);
-    hal_spi(addr);
-    for (uint8_t i = 0; i < len; i++) {
-        hal_spi(data[i]);
-    }
+    hal_spi_transact(buf, 3+len, NULL, 0);
     hal_spi_select(0);
 }
 
@@ -209,41 +212,42 @@ static void WriteReg (uint16_t addr, uint8_t val) {
 }
 
 static void WriteBuffer (uint8_t off, const uint8_t* data, uint8_t len) {
+    uint8_t buf[2+len];
+    buf[0] = CMD_WRITEBUFFER;
+    buf[1] = off;
+    memcpy(buf+2, data, len);
+
     hal_spi_select(1);
     hal_pin_busy_wait();
     state.sleeping = 0;
-    hal_spi(CMD_WRITEBUFFER);
-    hal_spi(off);
-    for (uint8_t i = 0; i < len; i++) {
-        hal_spi(data[i]);
-    }
+    hal_spi_transact(buf, 2+len, NULL, 0);
     hal_spi_select(0);
 }
 
 static uint8_t readcmd (uint8_t cmd, uint8_t* data, uint8_t len) {
+    uint8_t buf[1+len];
+
     hal_spi_select(1);
     hal_pin_busy_wait();
     state.sleeping = 0;
-    hal_spi(cmd);
-    uint8_t stat = hal_spi(0x00);
-    for (u1_t i = 0; i < len; i++) {
-        data[i] = hal_spi(0x00);
-    }
+    hal_spi_transact(&cmd, 1, buf, 1+len);
     hal_spi_select(0);
-    return stat;
+
+    memcpy(data, buf+1, len);
+    return buf[0];
 }
 
 static void ReadRegs (uint16_t addr, uint8_t* data, uint8_t len) {
+    uint8_t buf[4];
+    buf[0] = CMD_READREGISTER;
+    buf[1] = addr >> 8;
+    buf[2] = addr;
+    buf[3] = 0x00; // NOP
+
     hal_spi_select(1);
     hal_pin_busy_wait();
     state.sleeping = 0;
-    hal_spi(CMD_READREGISTER);
-    hal_spi(addr >> 8);
-    hal_spi(addr);
-    hal_spi(0x00); // NOP
-    for (uint8_t i = 0; i < len; i++) {
-        data[i] = hal_spi(0x00);
-    }
+    hal_spi_transact(buf, 4, data, len);
     hal_spi_select(0);
 }
 
@@ -254,15 +258,15 @@ static uint8_t ReadReg (uint16_t addr) {
 }
 
 static void ReadBuffer (uint8_t off, uint8_t* data, uint8_t len) {
+    uint8_t buf[3];
+    buf[0] = CMD_READBUFFER;
+    buf[1] = off;
+    buf[2] = 0x00; // NOP
+
     hal_spi_select(1);
     hal_pin_busy_wait();
     state.sleeping = 0;
-    hal_spi(CMD_READBUFFER);
-    hal_spi(off);
-    hal_spi(0x00); // NOP
-    for (uint8_t i = 0; i < len; i++) {
-        data[i] = hal_spi(0x00);
-    }
+    hal_spi_transact(buf, 3, data, len);
     hal_spi_select(0);
 }
 
@@ -623,12 +627,7 @@ void radio_cw (void) {
 
 void radio_starttx (bool txcontinuous) {
     if (txcontinuous) {
-        // XXX: This is probably not right. In 2.2, Semtech changed the
-        // 127x driver to rename txsw to radio_cw, but
-        // radio_starttx(true) now uses txfsk/txlora in continuous mode
-        // (which is apparently different from radio_cw), so that needs
-        // to be impliemented here as well
-        radio_cw();
+        ASSERT(0); // not yet supported (continuous packet mode)
     } else {
         if (isFsk(LMIC.rps)) { // FSK modem
             txfsk();
@@ -746,6 +745,10 @@ void radio_cca () {
 void radio_cad (void) {
     // not yet...
     ASSERT(0);
+}
+
+void radio_cw (void) {
+    txcw();
 }
 
 void radio_startrx (bool rxcontinuous) {

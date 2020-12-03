@@ -1,0 +1,7 @@
+cobs
+colorama
+intelhex
+liblora
+numpy
+unicorn
+git+https://github.com/mkuyper/ward.git

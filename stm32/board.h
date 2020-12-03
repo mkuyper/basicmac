@@ -1,3 +1,4 @@
+// Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
 // Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 //
 // This file is subject to the terms and conditions defined in file 'LICENSE',
@@ -28,12 +29,38 @@
 #define BRD_GPIO_EXT_PULLDN             (1 << 17)
 #define BRD_GPIO_ACTIVE_LOW             (1 << 18)
 
-// special values for low-power UART
-#define BRD_LPUART(x)                   ((x) | (1 << 8))
-
+// GPIO ports
 #define PORT_A  0
 #define PORT_B  1
 #define PORT_C  2
+
+// macros to define DMA channels
+#define BRD_DMA_CHAN(a)                 (a)
+#define BRD_DMA_CHANS(a,b)              (((b) << 4) | (a))
+#define BRD_DMA_CHAN_A(x)               (((x) & 0xf) - 1)
+#define BRD_DMA_CHAN_B(x)               ((((x) >> 4) & 0xf) - 1)
+
+// UART instances
+#define BRD_USART1                      (1 << 0)
+#define BRD_USART2                      (1 << 1)
+#define BRD_LPUART1                     (1 << 2)
+
+// UART ports
+#define BRD_USART1_PORT                 usart_port_u1
+#define BRD_USART2_PORT                 usart_port_u2
+#define BRD_LPUART1_PORT                usart_port_lpu1
+
+#define BRD_USART_EN(m)                 (((BRD_USART) & (m)) != 0)
+
+// Timer instances
+#define BRD_TIM2                        (1 << 0)
+#define BRD_TIM3                        (1 << 1)
+
+// Timer peripherals
+#define BRD_TIM2_PERIPH                 tmr_t2
+#define BRD_TIM3_PERIPH                 tmr_t3
+
+#define BRD_TMR_EN(m)                   (((BRD_TMR) & (m)) != 0)
 
 
 #ifdef BRD_IMPL_INC

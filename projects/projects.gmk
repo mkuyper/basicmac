@@ -26,8 +26,8 @@ CFLAGS		+= $(FLAGS)
 LDFLAGS		+= $(FLAGS)
 ASFLAGS		+= $(FLAGS)
 
-DEFS		+= -DVARIANT="\"$(VARIANT)\""
-DEFS		+= -DPROJECT="\"$(PROJECT)\""
+DEFS		+= -DVARIANT_STR="\"$(VARIANT)\""
+DEFS		+= -DPROJECT_STR="\"$(PROJECT)\""
 DEFS		+= $(addprefix -DCFG_,$(REGIONS))
 DEFS		+= $(addprefix -DCFG_,$(LMICCFG))
 
@@ -93,7 +93,7 @@ variant: $(VTARGET)
 variants: $(VTARGETS)
 
 variant-%:
-	$(MAKE) -j 6 variant VARIANT=$*
+	$(MAKE) -j8 variant VARIANT=$*
 
 all: $(ALL)
 
