@@ -20,17 +20,17 @@
 // Target platform as C library
 #include <stdbool.h>
 #include <stdint.h>
-typedef uint8_t		bit_t;
-typedef uint8_t		u1_t;
-typedef int8_t		s1_t;
-typedef uint16_t	u2_t;
-typedef int16_t		s2_t;
-typedef uint32_t	u4_t;
-typedef int32_t		s4_t;
-typedef uint64_t	u8_t;
-typedef int64_t		s8_t;
-typedef unsigned int	uint;
-typedef const char*	str_t;
+typedef uint8_t         bit_t;
+typedef uint8_t         u1_t;
+typedef int8_t          s1_t;
+typedef uint16_t        u2_t;
+typedef int16_t         s2_t;
+typedef uint32_t        u4_t;
+typedef int32_t         s4_t;
+typedef uint64_t        u8_t;
+typedef int64_t         s8_t;
+typedef unsigned int    uint;
+typedef const char*     str_t;
 
 #include <string.h>
 #if !defined(CFG_simul)
@@ -41,9 +41,9 @@ typedef const char*	str_t;
 #include <stdio.h>
 #define ASSERT(cond) do { \
     if(!(cond)) { fprintf(stderr, "ASSERTION FAILED: %s at %s:%d\n", \
-			  #cond, __FILE__, __LINE__); hal_failed(); } } while (0)
+                          #cond, __FILE__, __LINE__); hal_failed(); } } while (0)
 #elif defined(CFG_DEBUG)
-#define ASSERT(cond) do { if(!(cond)) { debug_printf("%s:%d: assertion failed\r\n", __FILE__, __LINE__); hal_failed(); } } while (0)
+#define ASSERT(cond) do { if(!(cond)) { hal_enableIRQs(); debug_printf("%s:%d: assertion failed\r\n", __FILE__, __LINE__); hal_failed(); } } while (0)
 #else
 #define ASSERT(cond) do { if(!(cond)) hal_failed(); } while (0)
 #endif
@@ -51,17 +51,28 @@ typedef const char*	str_t;
 #define ASSERT(cond) do { } while (0)
 #endif
 
-#define max(a,b)                                \
+#include <assert.h>
+#if __cplusplus >= 201103L || defined(static_assert)
+#define LMIC_STATIC_ASSERT static_assert
+#else
+#define LMIC_STATIC_ASSERT(expr, msg)
+#endif
+
+#ifdef __cplusplus
+extern "C"{
+#endif
+
+#define os_max(a,b)                             \
     ({  __typeof__ (a) _a = (a);                \
         __typeof__ (b) _b = (b);                \
         _a > _b ? _a : _b; })
 
-#define min(a,b)                                \
+#define os_min(a,b)                             \
     ({  __typeof__ (a) _a = (a);                \
         __typeof__ (b) _b = (b);                \
         _a < _b ? _a : _b; })
 
-#define os_minmax(vmin,v,vmax) (max(vmin,min(v,vmax)))
+#define os_minmax(vmin,v,vmax) (os_max(vmin,os_min(v,vmax)))
 #define os_clearMem(a,b)   memset(a,0,b)
 #define os_copyMem(a,b,c)  memcpy(a,b,c)
 #define os_moveMem(a,b,c)  memmove(a,b,c)
@@ -133,10 +144,10 @@ extern u4_t AESKEY[];
 #define APP(t) (APPDATA)
 #endif
 
-#define LOGCHECK(lvl,block) do {		\
-	if( lvl <= log_lvl ) {			\
-	    block;				\
-	} 					\
+#define LOGCHECK(lvl,block) do {                \
+        if( lvl <= log_lvl ) {                  \
+            block;                              \
+        }                                       \
     } while(0)
 #if defined(CFG_simul)
 extern int log_lvl;
@@ -184,8 +195,8 @@ u1_t os_getRndU1 (void);
 typedef s4_t  ostime_t;
 typedef s8_t  osxtime_t;
 
-#define OSXTIME_MAX	INT64_MAX
-#define OSTIME_MAX_DIFF ((1U << 31) - 1)
+#define OSXTIME_MAX     INT64_MAX
+#define OSTIME_MAX_DIFF INT32_MAX
 
 #if !HAS_ostick_conv
 #define us2osticks(us)   ((ostime_t)( ((s8_t)(us) * OSTICKS_PER_SEC) / 1000000))
@@ -358,5 +369,10 @@ void radio_sleep (void);
 void radio_cca (void);
 void radio_cad (void);
 void radio_cw (void);
+void radio_generate_random (u4_t *words, u1_t len);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
 
 #endif // _oslmic_h_

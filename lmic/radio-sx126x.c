@@ -13,122 +13,138 @@
 
 // ----------------------------------------
 // Commands Selecting the Operating Modes of the Radio
-#define CMD_SETSLEEP			0x84
-#define CMD_SETSTANDBY			0x80
-#define CMD_SETFS			0xC1
-#define CMD_SETTX			0x83
-#define CMD_SETRX			0x82
-#define CMD_STOPTIMERONPREAMBLE		0x9F
-#define CMD_SETRXDUTYCYCLE		0x94
-#define CMD_SETCAD			0xC5
-#define CMD_SETTXCONTINUOUSWAVE		0xD1
-#define CMD_SETTXINFINITEPREAMBLE	0xD2
-#define CMD_SETREGULATORMODE		0x96
-#define CMD_CALIBRATE			0x89
-#define CMD_CALIBRATEIMAGE		0x98
-#define CMD_SETPACONFIG			0x95
-#define CMD_SETRXTXFALLBACKMODE		0x93
+#define CMD_SETSLEEP                    0x84
+#define CMD_SETSTANDBY                  0x80
+#define CMD_SETFS                       0xC1
+#define CMD_SETTX                       0x83
+#define CMD_SETRX                       0x82
+#define CMD_STOPTIMERONPREAMBLE         0x9F
+#define CMD_SETRXDUTYCYCLE              0x94
+#define CMD_SETCAD                      0xC5
+#define CMD_SETTXCONTINUOUSWAVE         0xD1
+#define CMD_SETTXINFINITEPREAMBLE       0xD2
+#define CMD_SETREGULATORMODE            0x96
+#define CMD_CALIBRATE                   0x89
+#define CMD_CALIBRATEIMAGE              0x98
+#define CMD_SETPACONFIG                 0x95
+#define CMD_SETRXTXFALLBACKMODE         0x93
 
 // Commands to Access the Radio Registers and FIFO Buffer
-#define CMD_WRITEREGISTER		0x0D
-#define CMD_READREGISTER		0x1D
-#define CMD_WRITEBUFFER			0x0E
-#define CMD_READBUFFER			0x1E
+#define CMD_WRITEREGISTER               0x0D
+#define CMD_READREGISTER                0x1D
+#define CMD_WRITEBUFFER                 0x0E
+#define CMD_READBUFFER                  0x1E
 
 // Commands Controlling the Radio IRQs and DIOs
-#define CMD_SETDIOIRQPARAMS		0x08
-#define CMD_GETIRQSTATUS		0x12
-#define CMD_CLEARIRQSTATUS		0x02
-#define CMD_SETDIO2ASRFSWITCHCTRL	0x9D
-#define CMD_SETDIO3ASTCXOCTRL		0x97
+#define CMD_SETDIOIRQPARAMS             0x08
+#define CMD_GETIRQSTATUS                0x12
+#define CMD_CLEARIRQSTATUS              0x02
+#define CMD_SETDIO2ASRFSWITCHCTRL       0x9D
+#define CMD_SETDIO3ASTCXOCTRL           0x97
 
 // Commands Controlling the RF and Packets Settings
-#define CMD_SETRFFREQUENCY		0x86
-#define CMD_SETPACKETTYPE		0x8A
-#define CMD_GETPACKETTYPE		0x11
-#define CMD_SETTXPARAMS			0x8E
-#define CMD_SETMODULATIONPARAMS		0x8B
-#define CMD_SETPACKETPARAMS		0x8C
-#define CMD_SETCADPARAMS		0x88
-#define CMD_SETBUFFERBASEADDRESS	0x8F
-#define CMD_SETLORASYMBNUMTIMEOUT	0xA0
+#define CMD_SETRFFREQUENCY              0x86
+#define CMD_SETPACKETTYPE               0x8A
+#define CMD_GETPACKETTYPE               0x11
+#define CMD_SETTXPARAMS                 0x8E
+#define CMD_SETMODULATIONPARAMS         0x8B
+#define CMD_SETPACKETPARAMS             0x8C
+#define CMD_SETCADPARAMS                0x88
+#define CMD_SETBUFFERBASEADDRESS        0x8F
+#define CMD_SETLORASYMBNUMTIMEOUT       0xA0
 
 // Commands Returning the Radio Status
-#define CMD_GETSTATUS			0xC0
-#define CMD_GETRSSIINST			0x15
-#define CMD_GETRXBUFFERSTATUS		0x13
-#define CMD_GETPACKETSTATUS		0x14
-#define CMD_GETDEVICEERRORS		0x17
-#define CMD_CLEARDEVICEERRORS		0x07
-#define CMD_GETSTATS			0x10
-#define CMD_RESETSTATS			0x00
+#define CMD_GETSTATUS                   0xC0
+#define CMD_GETRSSIINST                 0x15
+#define CMD_GETRXBUFFERSTATUS           0x13
+#define CMD_GETPACKETSTATUS             0x14
+#define CMD_GETDEVICEERRORS             0x17
+#define CMD_CLEARDEVICEERRORS           0x07
+#define CMD_GETSTATS                    0x10
+#define CMD_RESETSTATS                  0x00
 
 
 // ----------------------------------------
 // List of Registers
 
-#define REG_WHITENINGMSB	0x06B8
-#define REG_WHITENINGLSB	0x06B9
-#define REG_CRCINITVALMSB	0x06BC
-#define REG_CRCINITVALLSB	0x06BD
-#define REG_CRCPOLYVALMSB	0x06BE
-#define REG_CRCPOLYVALLSB	0x06BF
-#define REG_SYNCWORD0		0x06C0
-#define REG_SYNCWORD1		0x06C1
-#define REG_SYNCWORD2		0x06C2
-#define REG_SYNCWORD3		0x06C3
-#define REG_SYNCWORD4		0x06C4
-#define REG_SYNCWORD5		0x06C5
-#define REG_SYNCWORD6		0x06C6
-#define REG_SYNCWORD7		0x06C7
-#define REG_NODEADDRESS		0x06CD
-#define REG_BROADCASTADDR	0x06CE
-#define REG_LORASYNCWORDMSB	0x0740
-#define REG_LORASYNCWORDLSB	0x0741
-#define REG_RANDOMNUMBERGEN0	0x0819
-#define REG_RANDOMNUMBERGEN1	0x081A
-#define REG_RANDOMNUMBERGEN2	0x081B
-#define REG_RANDOMNUMBERGEN3	0x081C
-#define REG_RXGAIN		0x08AC
-#define REG_OCPCONFIG		0x08E7
-#define REG_XTATRIM		0x0911
-#define REG_XTBTRIM		0x0912
+#define REG_WHITENINGMSB        0x06B8
+#define REG_WHITENINGLSB        0x06B9
+#define REG_CRCINITVALMSB       0x06BC
+#define REG_CRCINITVALLSB       0x06BD
+#define REG_CRCPOLYVALMSB       0x06BE
+#define REG_CRCPOLYVALLSB       0x06BF
+#define REG_SYNCWORD0           0x06C0
+#define REG_SYNCWORD1           0x06C1
+#define REG_SYNCWORD2           0x06C2
+#define REG_SYNCWORD3           0x06C3
+#define REG_SYNCWORD4           0x06C4
+#define REG_SYNCWORD5           0x06C5
+#define REG_SYNCWORD6           0x06C6
+#define REG_SYNCWORD7           0x06C7
+#define REG_NODEADDRESS         0x06CD
+#define REG_BROADCASTADDR       0x06CE
+#define REG_LORASYNCWORDMSB     0x0740
+#define REG_LORASYNCWORDLSB     0x0741
+#define REG_RANDOMNUMBERGEN0    0x0819
+#define REG_RANDOMNUMBERGEN1    0x081A
+#define REG_RANDOMNUMBERGEN2    0x081B
+#define REG_RANDOMNUMBERGEN3    0x081C
+#define REG_RXGAIN              0x08AC
+#define REG_OCPCONFIG           0x08E7
+#define REG_XTATRIM             0x0911
+#define REG_XTBTRIM             0x0912
 
 // sleep modes
-#define SLEEP_COLD		0x00 // (no rtc timeout)
-#define SLEEP_WARM		0x04 // (no rtc timeout)
+#define SLEEP_COLD              0x00 // (no rtc timeout)
+#define SLEEP_WARM              0x04 // (no rtc timeout)
 
 // standby modes
-#define STDBY_RC		0x00
-#define STDBY_XOSC		0x01
+#define STDBY_RC                0x00
+#define STDBY_XOSC              0x01
 
 // regulator modes
-#define REGMODE_LDO		0x00
-#define REGMODE_DCDC		0x01
+#define REGMODE_LDO             0x00
+#define REGMODE_DCDC            0x01
 
 // packet types
-#define PACKET_TYPE_FSK		0x00
-#define PACKET_TYPE_LORA	0x01
+#define PACKET_TYPE_FSK         0x00
+#define PACKET_TYPE_LORA        0x01
 
 // crc types
-#define CRC_OFF			0x01
-#define CRC_1_BYTE		0x00
-#define CRC_2_BYTE		0x02
-#define CRC_1_BYTE_INV		0x04
-#define CRC_2_BYTE_INV		0x06
+#define CRC_OFF                 0x01
+#define CRC_1_BYTE              0x00
+#define CRC_2_BYTE              0x02
+#define CRC_1_BYTE_INV          0x04
+#define CRC_2_BYTE_INV          0x06
 
 // irq types
-#define IRQ_TXDONE		(1 << 0)
-#define IRQ_RXDONE		(1 << 1)
-#define IRQ_PREAMBLEDETECTED	(1 << 2)
-#define IRQ_SYNCWORDVALID	(1 << 3)
-#define IRQ_HEADERVALID		(1 << 4)
-#define IRQ_HEADERERR		(1 << 5)
-#define IRQ_CRCERR		(1 << 6)
-#define IRQ_CADDONE		(1 << 7)
-#define IRQ_CADDETECTED		(1 << 8)
-#define IRQ_TIMEOUT		(1 << 9)
-#define IRQ_ALL 		0x3FF
+#define IRQ_TXDONE              (1 << 0)
+#define IRQ_RXDONE              (1 << 1)
+#define IRQ_PREAMBLEDETECTED    (1 << 2)
+#define IRQ_SYNCWORDVALID       (1 << 3)
+#define IRQ_HEADERVALID         (1 << 4)
+#define IRQ_HEADERERR           (1 << 5)
+#define IRQ_CRCERR              (1 << 6)
+#define IRQ_CADDONE             (1 << 7)
+#define IRQ_CADDETECTED         (1 << 8)
+#define IRQ_TIMEOUT             (1 << 9)
+#define IRQ_ALL                 0x3FF
+
+// TCXO voltages (limited to VDD - 200mV)
+#define TCXO_VOLTAGE1_6V        0x00
+#define TCXO_VOLTAGE1_7V        0x01
+#define TCXO_VOLTAGE1_8V        0x02
+#define TCXO_VOLTAGE2_2V        0x03
+#define TCXO_VOLTAGE2_4V        0x04
+#define TCXO_VOLTAGE2_7V        0x05
+#define TCXO_VOLTAGE3_0V        0x06
+#define TCXO_VOLTAGE3_3V        0x07
+
+// XXX: These should probably be configurable
+// XXX: The startup time delays TX/RX by 320*15.625=5ms, maybe switch on
+// TCXO early?
+#define TCXO_VOLTAGE TCXO_VOLTAGE1_7V
+#define TCXO_STARTUP_TIME 320 // In multiples of 15.625μs
 
 #define LORA_TXDONE_FIXUP       us2osticks(269) // determined by lwtestapp using device pin wired to sx1301 pps...
 #define FSK_TXDONE_FIXUP        us2osticks(0) // XXX
@@ -190,11 +206,10 @@ static void WriteRegs (uint16_t addr, const uint8_t* data, uint8_t len) {
     hal_spi_select(0);
 }
 
-#if 0 // not used
+static void WriteReg (uint16_t addr, uint8_t val) __attribute__((__unused__)); // Ok if this is unused
 static void WriteReg (uint16_t addr, uint8_t val) {
     WriteRegs(addr, &val, 1);
 }
-#endif
 
 static void WriteBuffer (uint8_t off, const uint8_t* data, uint8_t len) {
     uint8_t buf[2+len];
@@ -275,6 +290,15 @@ static void SetDIO2AsRfSwitchCtrl (uint8_t enable) {
     writecmd(CMD_SETDIO2ASRFSWITCHCTRL, &enable, 1);
 }
 
+// use DIO3 to drive crystal enable switch
+static void SetDIO3AsTcxoCtrl () {
+    uint32_t timeout = TCXO_STARTUP_TIME;
+    uint8_t voltage = TCXO_VOLTAGE1_7V;
+    uint8_t data[] = {voltage, (timeout >> 16) & 0xff, (timeout >> 8) & 0xff, timeout & 0xff };
+
+    writecmd(CMD_SETDIO3ASTCXOCTRL, data, sizeof(data));
+}
+
 // write payload to fifo buffer at offset 0
 static void WriteFifo (uint8_t *buf, uint8_t len) {
     static const uint8_t txrxbase[] = { 0, 0 };
@@ -328,20 +352,20 @@ static void SetPacketType (uint8_t type) {
 // calibrate the image rejection
 static void CalibrateImage (uint32_t freq) {
     static const struct {
-	uint32_t min;
-	uint32_t max;
-	uint8_t freq[2];
+        uint32_t min;
+        uint32_t max;
+        uint8_t freq[2];
     } bands[] = {
-	{ 430000000, 440000000, (uint8_t[]) { 0x6B, 0x6F } },
-	{ 470000000, 510000000, (uint8_t[]) { 0x75, 0x81 } },
-	{ 779000000, 787000000, (uint8_t[]) { 0xC1, 0xC5 } },
-	{ 863000000, 870000000, (uint8_t[]) { 0xD7, 0xDB } },
-	{ 902000000, 928000000, (uint8_t[]) { 0xE1, 0xE9 } },
+        { 430000000, 440000000, { 0x6B, 0x6F } },
+        { 470000000, 510000000, { 0x75, 0x81 } },
+        { 779000000, 787000000, { 0xC1, 0xC5 } },
+        { 863000000, 870000000, { 0xD7, 0xDB } },
+        { 902000000, 928000000, { 0xE1, 0xE9 } },
     };
-    for (int i = 0; i < sizeof(bands) / sizeof(bands[0]); i++) {
-	if (freq >= bands[i].min && freq <= bands[i].max) {
-	    writecmd(CMD_CALIBRATEIMAGE, bands[i].freq, 2);
-	}
+    for (size_t i = 0; i < sizeof(bands) / sizeof(bands[0]); i++) {
+        if (freq >= bands[i].min && freq <= bands[i].max) {
+            writecmd(CMD_CALIBRATEIMAGE, bands[i].freq, 2);
+        }
     }
 }
 
@@ -356,9 +380,9 @@ static void SetRfFrequency (uint32_t freq) {
 // configure modulation parameters for LoRa
 static void SetModulationParamsLora (u2_t rps) {
     uint8_t param[4];
-    param[0] = getSf(rps) + 6; // SF (sf7=1)
-    param[1] = getBw(rps) + 4; // BW (bw125=0)
-    param[2] = getCr(rps) + 1; // CR (cr45=0)
+    param[0] = getSf(rps) - SF7 + 7;    // SF (sf7 -> 7)
+    param[1] = getBw(rps) - BW125 + 4;  // BW (bw125 -> 4)
+    param[2] = getCr(rps) - CR_4_5 + 1; // CR (cr45 -> 1)
     param[3] = enDro(rps);     // low-data-rate-opt (symbol time equal or above 16.38 ms)
     writecmd(CMD_SETMODULATIONPARAMS, param, 4);
 }
@@ -501,32 +525,43 @@ static void SetCrc16 (uint16_t seed, uint16_t polynomial) {
     WriteRegs(REG_CRCPOLYVALMSB, buf, 2);
 }
 
-#if 0 // not used
+void radio_sleep (void) {
+    // cache sleep state to avoid unneccessary wakeup (waking up from cold sleep takes about 4ms)
+    if (state.sleeping == 0) {
+        SetSleep(SLEEP_COLD);
+        state.sleeping = 1;
+    }
+}
+
+// Do config common to all RF modes
+static void CommonSetup (void) {
+    SetRegulatorMode(REGMODE_DCDC);
+    if (hal_dio2_controls_rxtx())
+        SetDIO2AsRfSwitchCtrl(1);
+    if (hal_dio3_controls_tcxo())
+        SetDIO3AsTcxoCtrl();
+}
+
+static uint32_t GetRandom (void) __attribute__((__unused__)); // Ok if unused
 static uint32_t GetRandom (void) {
-    uint8_t buf[4];
+    uint32_t value;
+
+    // Set up oscillator and rx/tx
+    CommonSetup();
+
     // continuous rx
     SetRx(0xFFFFFF);
     // wait 1ms
     hal_waitUntil(os_getTime() + ms2osticks(1));
     // read random register
-    ReadRegs(REG_RANDOMNUMBERGEN0, buf, 4);
+    ReadRegs(REG_RANDOMNUMBERGEN0, (uint8_t*)&value, sizeof(value));
     // standby
     SetStandby(STDBY_RC);
-    return *((uint32_t*) buf);
-}
-#endif
-
-void radio_sleep (void) {
-    // cache sleep state to avoid unneccessary wakeup (waking up from cold sleep takes about 4ms)
-    if (state.sleeping == 0) {
-	SetSleep(SLEEP_COLD);
-	state.sleeping = 1;
-    }
+    return value;
 }
 
 static void txlora (void) {
-    SetRegulatorMode(REGMODE_DCDC);
-    SetDIO2AsRfSwitchCtrl(1);
+    CommonSetup();
     SetStandby(STDBY_RC);
     SetPacketType(PACKET_TYPE_LORA);
     SetRfFrequency(LMIC.freq);
@@ -550,8 +585,7 @@ static void txlora (void) {
 }
 
 static void txfsk (void) {
-    SetRegulatorMode(REGMODE_DCDC);
-    SetDIO2AsRfSwitchCtrl(1);
+    CommonSetup();
     SetStandby(STDBY_RC);
     SetPacketType(PACKET_TYPE_FSK);
     SetRfFrequency(LMIC.freq);
@@ -576,9 +610,8 @@ static void txfsk (void) {
     SetTx(64000); // timeout 1s (should not happen, TXDONE irq will be raised)
 }
 
-static void txcw (void) {
-    SetRegulatorMode(REGMODE_DCDC);
-    SetDIO2AsRfSwitchCtrl(1);
+void radio_cw (void) {
+    CommonSetup();
     SetStandby(STDBY_RC);
     SetRfFrequency(LMIC.freq);
     SetTxPower(LMIC.txpow + LMIC.brdTxPowOff);
@@ -595,23 +628,21 @@ static void txcw (void) {
 void radio_starttx (bool txcontinuous) {
     if (txcontinuous) {
         ASSERT(0); // not yet supported (continuous packet mode)
-	txcw();
     } else {
-	if (getSf(LMIC.rps) == FSK) { // FSK modem
-	    txfsk();
-	} else { // LoRa modem
-	    txlora();
-	}
-	// the radio will go back to STANDBY mode as soon as the TX is finished
-	// the corresponding IRQ will inform us about completion.
+        if (isFsk(LMIC.rps)) { // FSK modem
+            txfsk();
+        } else { // LoRa modem
+            txlora();
+        }
+        // the radio will go back to STANDBY mode as soon as the TX is finished
+        // the corresponding IRQ will inform us about completion.
     }
 }
 
 static void rxfsk (bool rxcontinuous) {
     // configure radio (needs rampup time)
     ostime_t t0 = os_getTime();
-    SetRegulatorMode(REGMODE_DCDC);
-    SetDIO2AsRfSwitchCtrl(1);
+    CommonSetup();
     SetStandby(STDBY_RC);
     SetPacketType(PACKET_TYPE_FSK);
     SetRfFrequency(LMIC.freq);
@@ -631,27 +662,28 @@ static void rxfsk (bool rxcontinuous) {
     // enable IRQs in HAL
     hal_irqmask_set(HAL_IRQMASK_DIO1);
 
+    ostime_t now = os_getTime();
+    if (!rxcontinuous && LMIC.rxtime - now < 0) {
+        debug_printf("WARNING: rxtime is %ld ticks in the past! (ramp-up time %ld ms / %ld ticks)\r\n",
+                     now - LMIC.rxtime, osticks2ms(now - t0), now - t0);
+    }
+
     // now receive (lock interrupts only for final fine tuned rx timing...)
     hal_disableIRQs();
     if (rxcontinuous) { // continous rx
-	BACKTRACE();
-	// enable antenna switch for RX (and account power consumption)
-	hal_ant_switch(HAL_ANTSW_RX);
-	// rx infinitely (no timeout, until rxdone, will be restarted)
-	SetRx(0);
+        BACKTRACE();
+        // enable antenna switch for RX (and account power consumption)
+        hal_ant_switch(HAL_ANTSW_RX);
+        // rx infinitely (no timeout, until rxdone, will be restarted)
+        SetRx(0);
     } else { // single rx
-	BACKTRACE();
-	// busy wait until exact rx time
-	ostime_t now = os_getTime();
-	if (LMIC.rxtime - now < 0) {
-	    debug_printf("WARNING: rxtime is %d ticks in the past! (ramp-up time %d ms / %d ticks)\r\n",
-			 now - LMIC.rxtime, osticks2ms(now - t0), now - t0);
-	}
+        BACKTRACE();
+        // busy wait until exact rx time
         hal_waitUntil(LMIC.rxtime);
-	// enable antenna switch for RX (and account power consumption)
-	hal_ant_switch(HAL_ANTSW_RX);
-	// rx for max LMIC.rxsyms symbols (rxsyms = nbytes for FSK)
-	SetRx((LMIC.rxsyms << 9) / 50); // nbytes * 8 * 64 * 1000 / 50000
+        // enable antenna switch for RX (and account power consumption)
+        hal_ant_switch(HAL_ANTSW_RX);
+        // rx for max LMIC.rxsyms symbols (rxsyms = nbytes for FSK)
+        SetRx((LMIC.rxsyms << 9) / 50); // nbytes * 8 * 64 * 1000 / 50000
     }
     hal_enableIRQs();
 }
@@ -659,8 +691,7 @@ static void rxfsk (bool rxcontinuous) {
 static void rxlora (bool rxcontinuous) {
     // configure radio (needs rampup time)
     ostime_t t0 = os_getTime();
-    SetRegulatorMode(REGMODE_DCDC);
-    SetDIO2AsRfSwitchCtrl(1);
+    CommonSetup();
     SetStandby(STDBY_RC);
     SetPacketType(PACKET_TYPE_LORA);
     SetRfFrequency(LMIC.freq);
@@ -679,27 +710,30 @@ static void rxlora (bool rxcontinuous) {
     // enable IRQs in HAL
     hal_irqmask_set(HAL_IRQMASK_DIO1);
 
+    ostime_t now = os_getTime();
+    if (!rxcontinuous && LMIC.rxtime - now < 0) {
+        // Print before disabling IRQs, to work around deadlock on some
+        // Arduino cores that doe not really support printing without IRQs
+        debug_printf("WARNING: rxtime is %ld ticks in the past! (ramp-up time %ld ms / %ld ticks)\r\n",
+                     now - LMIC.rxtime, osticks2ms(now - t0), now - t0);
+    }
+
     // now receive (lock interrupts only for final fine tuned rx timing...)
     hal_disableIRQs();
     if (rxcontinuous) { // continous rx
-	BACKTRACE();
-	// enable antenna switch for RX (and account power consumption)
-	hal_ant_switch(HAL_ANTSW_RX);
-	// rx infinitely (no timeout, until rxdone, will be restarted)
-	SetRx(0);
+        BACKTRACE();
+        // enable antenna switch for RX (and account power consumption)
+        hal_ant_switch(HAL_ANTSW_RX);
+        // rx infinitely (no timeout, until rxdone, will be restarted)
+        SetRx(0);
     } else { // single rx
-	BACKTRACE();
-	// busy wait until exact rx time
-	ostime_t now = os_getTime();
-	if (LMIC.rxtime - now < 0) {
-	    debug_printf("WARNING: rxtime is %d ticks in the past! (ramp-up time %d ms / %d ticks)\r\n",
-			 now - LMIC.rxtime, osticks2ms(now - t0), now - t0);
-	}
+        BACKTRACE();
+        // busy wait until exact rx time
         hal_waitUntil(LMIC.rxtime);
-	// enable antenna switch for RX (and account power consumption)
-	hal_ant_switch(HAL_ANTSW_RX);
-	// rx for max LMIC.rxsyms symbols
-	SetRx(0); // (infinite, timeout set via SetLoRaSymbNumTimeout)
+        // enable antenna switch for RX (and account power consumption)
+        hal_ant_switch(HAL_ANTSW_RX);
+        // rx for max LMIC.rxsyms symbols
+        SetRx(0); // (infinite, timeout set via SetLoRaSymbNumTimeout)
     }
     hal_enableIRQs();
 }
@@ -718,7 +752,7 @@ void radio_cw (void) {
 }
 
 void radio_startrx (bool rxcontinuous) {
-    if (getSf(LMIC.rps) == FSK) { // FSK modem
+    if (isFsk(LMIC.rps)) { // FSK modem
         rxfsk(rxcontinuous);
     } else { // LoRa modem
         rxlora(rxcontinuous);
@@ -728,7 +762,11 @@ void radio_startrx (bool rxcontinuous) {
 // reset radio
 static void radio_reset (void) {
     // drive RST pin low
-    hal_pin_rst(0);
+    bool has_reset = hal_pin_rst(0);
+
+    // If reset is not connected, just continue and hope for the best
+    if (!has_reset)
+        return;
 
     // wait > 100us
     hal_waitUntil(os_getTime() + ms2osticks(1));
@@ -756,7 +794,7 @@ void radio_init (bool calibrate) {
     ASSERT( ReadReg(REG_LORASYNCWORDLSB) == 0x24 );
 
     if (calibrate) {
-	CalibrateImage(LMIC.freq);
+        CalibrateImage(LMIC.freq);
     }
 
     // go to SLEEP mode
@@ -765,62 +803,69 @@ void radio_init (bool calibrate) {
     hal_enableIRQs();
 }
 
+void radio_generate_random(u4_t *words, u1_t len) {
+    while (len--)
+        *words++ = GetRandom ();
+}
+
 // (run by irqjob)
 bool radio_irq_process (ostime_t irqtime, u1_t diomask) {
+    (void)diomask; // unused
+
     uint16_t irqflags = GetIrqStatus();
 
     // dispatch modem
-    if (getSf(LMIC.rps) == FSK) { // FSK modem
-	if (irqflags & IRQ_TXDONE) { // TXDONE
-	    BACKTRACE();
+    if (isFsk(LMIC.rps)) { // FSK modem
+        if (irqflags & IRQ_TXDONE) { // TXDONE
+            BACKTRACE();
             // save exact tx time
             LMIC.txend = irqtime - FSK_TXDONE_FIXUP;
 
         } else if (irqflags & IRQ_RXDONE) { // RXDONE
-	    BACKTRACE();
+            BACKTRACE();
 
             // read rx quality parameters
-	    LMIC.rssi = GetPacketStatusFsk();
-	    LMIC.snr = 0; // N/A
+            LMIC.rssi = GetPacketStatusFsk();
+            LMIC.snr = 0; // N/A
 
-	    // read FIFO
-	    LMIC.dataLen = ReadFifo(LMIC.frame);
+            // read FIFO
+            LMIC.dataLen = ReadFifo(LMIC.frame);
 
             // save exact rx timestamps
             LMIC.rxtime  = irqtime - FSK_RXDONE_FIXUP; // end of frame timestamp
-	    LMIC.rxtime0 = LMIC.rxtime - calcAirTime(LMIC.rps, LMIC.dataLen); // beginning of frame timestamp
+            LMIC.rxtime0 = LMIC.rxtime - calcAirTime(LMIC.rps, LMIC.dataLen); // beginning of frame timestamp
 #ifdef DEBUG_RX
-	    debug_printf("RX[freq=%.1F,FSK,rssi=%d,len=%d]: %h\r\n",
-			 LMIC.freq, 6, LMIC.rssi - RSSI_OFF, LMIC.dataLen, LMIC.frame, LMIC.dataLen);
+            debug_printf("RX[rssi=%d,len=%d]: %h\r\n",
+                         LMIC.rssi - RSSI_OFF, LMIC.dataLen, LMIC.frame, LMIC.dataLen);
 #endif
-	} else if (irqflags & IRQ_TIMEOUT) { // TIMEOUT
-	    BACKTRACE();
+        } else if (irqflags & IRQ_TIMEOUT) { // TIMEOUT
+            BACKTRACE();
             // indicate timeout
             LMIC.dataLen = 0;
 #ifdef DEBUG_RX
-	    debug_printf("RX[freq=%.1F,FSK]: TIMEOUT\r\n", LMIC.freq, 6);
+            debug_printf("RX: TIMEOUT\r\n");
 #endif
         } else {
-	    // unexpected irq
-	    debug_printf("UNEXPECTED RADIO IRQ %04x (after %d ticks, %.1Fms)\r\n", irqflags, irqtime - LMIC.rxtime, osticks2us(irqtime - LMIC.rxtime), 3);
-	    TRACE_VAL(irqflags);
-	    ASSERT(0);
-	}
+            // unexpected irq
+            debug_printf("UNEXPECTED RADIO IRQ %04x (after %ld ticks, %.1Fms)\r\n", irqflags, irqtime - LMIC.rxtime, osticks2us(irqtime - LMIC.rxtime), 3);
+            TRACE_VAL(irqflags);
+            ASSERT(0);
+        }
     } else { // LORA modem
-	if (irqflags & IRQ_TXDONE) { // TXDONE
-	    BACKTRACE();
+        if (irqflags & IRQ_TXDONE) { // TXDONE
+            BACKTRACE();
 
             // save exact tx time
             LMIC.txend = irqtime - LORA_TXDONE_FIXUP;
 
         } else if (irqflags & IRQ_RXDONE) { // RXDONE
-	    BACKTRACE();
+            BACKTRACE();
 
             // read rx quality parameters
-	    GetPacketStatusLora(&LMIC.rssi, &LMIC.snr);
+            GetPacketStatusLora(&LMIC.rssi, &LMIC.snr);
 
-	    // read FIFO
-	    LMIC.dataLen = ReadFifo(LMIC.frame);
+            // read FIFO
+            LMIC.dataLen = ReadFifo(LMIC.frame);
 
             // save exact rx timestamps
             LMIC.rxtime = irqtime; // end of frame timestamp
@@ -830,27 +875,25 @@ bool radio_irq_process (ostime_t irqtime, u1_t diomask) {
             else if (getBw(LMIC.rps) == BW500) {
                 LMIC.rxtime -= LORA_RXDONE_FIXUP_500[getSf(LMIC.rps)];
             }
-	    LMIC.rxtime0 = LMIC.rxtime - calcAirTime(LMIC.rps, LMIC.dataLen); // beginning of frame timestamp
+            LMIC.rxtime0 = LMIC.rxtime - calcAirTime(LMIC.rps, LMIC.dataLen); // beginning of frame timestamp
 #ifdef DEBUG_RX
-	    debug_printf("RX[freq=%.1F,sf=%d,bw=%d,rssi=%d,snr=%.2F,len=%d]: %h\r\n",
-			 LMIC.freq, 6, getSf(LMIC.rps) + 6, 125 << getBw(LMIC.rps),
-			 LMIC.rssi - RSSI_OFF, LMIC.snr * 100 / SNR_SCALEUP, 2,
-			 LMIC.dataLen, LMIC.frame, LMIC.dataLen);
+            debug_printf("RX[rssi=%d,snr=%.2F,len=%d]: %h\r\n",
+                         LMIC.rssi - RSSI_OFF, (s4_t)(LMIC.snr * 100 / SNR_SCALEUP), 2,
+                         LMIC.dataLen, LMIC.frame, LMIC.dataLen);
 #endif
-	} else if (irqflags & IRQ_TIMEOUT) { // TIMEOUT
-	    BACKTRACE();
+        } else if (irqflags & IRQ_TIMEOUT) { // TIMEOUT
+            BACKTRACE();
             // indicate timeout
             LMIC.dataLen = 0;
 #ifdef DEBUG_RX
-	    debug_printf("RX[freq=%.1F,sf=%d,bw=%d]: TIMEOUT\r\n",
-			 LMIC.freq, 6, getSf(LMIC.rps) + 6, 125 << getBw(LMIC.rps));
+            debug_printf("RX: TIMEOUT\r\n");
 #endif
         } else {
-	    // unexpected irq
-	    debug_printf("UNEXPECTED RADIO IRQ %04x\r\n", irqflags);
-	    TRACE_VAL(irqflags);
-	    ASSERT(0);
-	}
+            // unexpected irq
+            debug_printf("UNEXPECTED RADIO IRQ %04x\r\n", irqflags);
+            TRACE_VAL(irqflags);
+            ASSERT(0);
+        }
     }
 
     // mask all IRQs

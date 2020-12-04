@@ -80,10 +80,10 @@ void gpio_cfg_extirq_ex (int port, int pin, bool rising, bool falling) {
     EXTI->RTSR &= ~mask; // clear trigger
     EXTI->FTSR &= ~mask; // clear trigger
     if( rising ) {
-	EXTI->RTSR |= mask;
+        EXTI->RTSR |= mask;
     }
     if( falling ) {
-	EXTI->FTSR |= mask;
+        EXTI->FTSR |= mask;
     }
 
     // configure the NVIC
@@ -104,10 +104,10 @@ void gpio_cfg_extirq (int port, int pin, int irqcfg) {
 
 void gpio_set_extirq (int pin, int on) {
     if (on) {
-	EXTI->PR = (1 << pin);
-	EXTI->IMR |= (1 << pin);
+        EXTI->PR = (1 << pin);
+        EXTI->IMR |= (1 << pin);
     } else {
-	EXTI->IMR &= ~(1 << pin);
+        EXTI->IMR &= ~(1 << pin);
     }
 }
 
