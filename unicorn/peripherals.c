@@ -171,9 +171,9 @@ void pio_set (unsigned int pin, int value) {
     } else { // output
         reg->outm |= mask;
         if( value ) {
-            reg->outv &= ~mask;
-        } else {
             reg->outv |= mask;
+        } else {
+            reg->outv &= ~mask;
         }
     }
     psvc(HAL_PID_GPIO, 0);
@@ -199,6 +199,53 @@ bool pio_active (unsigned int pin) {
 
 void pio_default (unsigned int pin) {
     pio_set(pin, PIO_INP_HIZ);
+}
+
+void pio_direct_start (unsigned int pin, pio_direct* dpio) {
+    dpio->reg = PERIPH_REG(HAL_PID_GPIO);
+    dpio->mask = 1 << BRD_PIN(pin);
+}
+
+void pio_direct_stop (pio_direct* dpio) {
+}
+
+void pio_direct_inp (pio_direct* dpio) {
+    gpio_reg* reg = dpio->reg;
+    uint32_t mask = dpio->mask;
+    reg->outm &= ~mask;
+    psvc(HAL_PID_GPIO, 0);
+}
+
+void pio_direct_out (pio_direct* dpio) {
+    gpio_reg* reg = dpio->reg;
+    uint32_t mask = dpio->mask;
+    reg->outm |= mask;
+    psvc(HAL_PID_GPIO, 0);
+}
+
+void pio_direct_set (pio_direct* dpio, int value) {
+    if( value ) {
+        pio_direct_set1(dpio);
+    } else {
+        pio_direct_set0(dpio);
+    }
+}
+
+void pio_direct_set0 (pio_direct* dpio) {
+    gpio_reg* reg = dpio->reg;
+    uint32_t mask = dpio->mask;
+    reg->outv &= ~mask;
+    psvc(HAL_PID_GPIO, 0);
+}
+
+void pio_direct_set1 (pio_direct* dpio) {
+    gpio_reg* reg = dpio->reg;
+    uint32_t mask = dpio->mask;
+    reg->outv |= mask;
+    psvc(HAL_PID_GPIO, 0);
+}
+
+unsigned int pio_direct_get (pio_direct* dpio) {
 }
 
 

@@ -1,3 +1,4 @@
+// Copyright (C) 2020-2021 Michael Kuyper. All rights reserved.
 // Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 //
 // This file is subject to the terms and conditions defined in file 'LICENSE',
@@ -5,6 +6,8 @@
 
 #ifndef _hw_h_
 #define _hw_h_
+
+#include <stdint.h>
 
 #define PERIPH_EEPROM
 
@@ -35,7 +38,12 @@
 #define PERIPH_USART
 #define USART_FUART1            ((void*) 1)
 
+typedef struct {
+    void* reg;
+    uint32_t mask;
+} pio_direct;
 #define PERIPH_PIO
+#define PERIPH_PIO_DIRECT
 #define PIO_IRQ_LINE(gpio) (gpio)
 
 #define PERIPH_CRC
