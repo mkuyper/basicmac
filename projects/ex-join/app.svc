@@ -8,5 +8,6 @@ require:
 #    - frag
 #    - fwman
 #    - eckm
+#    - perso
 
 # vim: syntax=yaml

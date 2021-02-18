@@ -139,8 +139,16 @@ int gpio_transition (int port, int pin, int type, int duration, unsigned int con
 	: 0)
 #endif
 
+typedef struct {
+    GPIO_TypeDef* gpio;
+    uint32_t mask;
+    uint32_t m_out;
+    uint32_t m_inp;
+    int port;
+} pio_direct;
 
 #define PERIPH_PIO
+#define PERIPH_PIO_DIRECT
 #define PIO_IRQ_LINE(gpio)   BRD_PIN(gpio)
 
 
@@ -234,6 +242,28 @@ extern const void* const usart_port_lpu1;
 
 #define PERIPH_USART
 #define HW_DMA
+
+#endif
+
+
+//////////////////////////////////////////////////////////////////////
+// Timer
+//////////////////////////////////////////////////////////////////////
+
+#if defined(BRD_TMR)
+
+#if BRD_TMR_EN(BRD_TIM2)
+void tmr_t2_irq (void);
+extern const void* const tmr_t2;
+#endif
+#if BRD_TMR_EN(BRD_TIM3)
+void tmr_t3_irq (void);
+extern const void* const tmr_t3;
+#endif
+
+#define PERIPH_TMR
+
+#define TMR_PSC_MHZ(x)  (((unsigned int) ((32.0 / (x)) + 0.5)) - 1)
 
 #endif
 
@@ -388,6 +418,7 @@ typedef void (*dma_cb) (int status, void* arg);
 void dma_config (unsigned int ch, unsigned int peripheral, unsigned int ccr, unsigned int flags, dma_cb callback, void* arg);
 int dma_deconfig (unsigned int ch);
 void dma_transfer (unsigned int ch, volatile void* paddr, void* maddr, int n);
+int dma_remaining (unsigned int ch);
 
 void dma_irq (void);
 

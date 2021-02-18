@@ -65,6 +65,13 @@ class Runtime():
         self.handle:Optional[asyncio.Handle] = None
         self.stepping = False
 
+    def reset(self) -> None:
+        self.clock = Runtime.dummyclock
+        self.jobs.clear()
+        if self.handle:
+            self.handle.cancel()
+            self.handle = None
+
     def setclock(self, clock:Optional[Clock]) -> None:
         if clock is None:
             clock = Runtime.dummyclock

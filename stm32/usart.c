@@ -20,6 +20,8 @@ typedef struct {
         osjob_t* job;
         osjobcb_t cb;
         int* pn;
+        ostime_t dl;            // deadline
+        ostime_t it;            // idle timeout
     } rx;
 } usart_state;
 
@@ -171,7 +173,7 @@ static void usart_off (const usart_port* usart, unsigned int flag) {
 
 static void rx_dma_cb (int status, void* port); // fwd decl
 
-static void rx_on (const usart_port* usart) {
+static void rx_on (const usart_port* usart, bool idle) {
     // turn on usart
     usart_on(usart, RX_ON);
     // flush data
@@ -181,10 +183,14 @@ static void rx_on (const usart_port* usart) {
     dma_config(usart->dma.rx, usart->dma.pid, DMA_CCR_MINC | DMA_CCR_PSIZE_1, DMA_CB_COMPLETE, rx_dma_cb, (void*) usart);
     // enable DMA
     usart->port->CR3 |= USART_CR3_DMAR;
-    // enable receiver
-    usart->port->CR1 |= USART_CR1_RE;
+    if( idle ) {
+        // enable interrupt
+        usart->port->CR1 |= USART_CR1_IDLEIE;
+    }
     // setup I/O line
     CFG_PIN_AF(usart->gpio.rx, GPIOCFG_OSPEED_40MHz | GPIOCFG_OTYPE_PUPD | GPIOCFG_PUPD_NONE);
+    // enable receiver
+    usart->port->CR1 |= USART_CR1_RE;
 }
 
 static int rx_off (const usart_port* usart) {
@@ -193,7 +199,7 @@ static int rx_off (const usart_port* usart) {
     // disable DMA
     usart->port->CR3 &= ~USART_CR3_DMAR;
     // disable receiver and interrupts
-    usart->port->CR1 &= ~USART_CR1_RE;
+    usart->port->CR1 &= ~(USART_CR1_RE | USART_CR1_IDLEIE);
     // deconfigure DMA
     int n = dma_deconfig(usart->dma.rx);
     // turn off usart
@@ -310,16 +316,26 @@ static void rx_timeout (osjob_t* job) {
     ASSERT(0);
 }
 
-void usart_recv (const void* port, void* dst, int* n, ostime_t timeout, osjob_t* job, osjobcb_t cb) {
+static void rewind_timeout (const usart_port* usart, bool idle) {
+    ostime_t it, dl = usart->state->rx.dl;
+    if( idle && (dl - (it = (os_getTime() + usart->state->rx.it))) > 0 ) {
+        dl = it;
+    }
+    os_setTimedCallback(usart->state->rx.job, dl, rx_timeout);
+}
+
+void usart_recv (const void* port, void* dst, int* n, ostime_t timeout, ostime_t idle_timeout, osjob_t* job, osjobcb_t cb) {
     const usart_port* usart = port;
 
     usart->state->rx.job = job;
     usart->state->rx.cb = cb;
     usart->state->rx.pn = n;
+    usart->state->rx.dl = os_getTime() + timeout;
+    usart->state->rx.it = idle_timeout;
 
-    os_setTimedCallback(usart->state->rx.job, os_getTime() + timeout, rx_timeout);
+    rewind_timeout(usart, false);
 
-    rx_on(usart);
+    rx_on(usart, (idle_timeout != 0));
     dma_transfer(usart->dma.rx, &usart->port->RDR, dst, *n);
 }
 
@@ -329,6 +345,13 @@ static void usart_irq (const usart_port* usart) {
     if( (cr1 & USART_CR1_TCIE) && (isr & USART_ISR_TC) ) {
         tx_off(usart, true);
         os_setCallback(usart->state->tx.job, usart->state->tx.cb);
+    }
+    if( (cr1 & USART_CR1_IDLEIE) && (isr & USART_ISR_IDLE) ) {
+        // clear IDLE interrupt
+        usart->port->ICR = USART_ICR_IDLECF;
+        if( dma_remaining(usart->dma.rx) != *usart->state->rx.pn ) {
+            rewind_timeout(usart, true);
+        }
     }
 }
 

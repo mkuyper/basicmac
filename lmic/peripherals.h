@@ -40,7 +40,7 @@ enum {
 void usart_start (const void* port, unsigned int br);
 void usart_stop (const void* port);
 void usart_send (const void* port, void* src, int n, osjob_t* job, osjobcb_t cb);
-void usart_recv (const void* port, void* dst, int* n, ostime_t timeout, osjob_t* job, osjobcb_t cb);
+void usart_recv (const void* port, void* dst, int* n, ostime_t timeout, ostime_t idle_timeout, osjob_t* job, osjobcb_t cb);
 void usart_abort_recv (const void* port);
 void usart_str (const void* port, const char* str);
 
@@ -55,6 +55,7 @@ enum {
     PIO_INP_HIZ = -1,           // ..111b
     PIO_INP_PUP = -2,           // ..110b
     PIO_INP_PDN = -3,           // ..101b
+    PIO_INP_PAU = -4,           // ..100b
     PIO_INP_ANA = -5,           // ..011b
 };
 
@@ -62,6 +63,23 @@ void pio_default (unsigned int pin);
 void pio_set (unsigned int pin, int value);
 int pio_get (unsigned int pin);
 void pio_activate (unsigned int pin, bool active);
+bool pio_active (unsigned int pin);
+
+uint32_t pio_irq_get (void);
+void pio_irq_clear (uint32_t mask);
+void pio_irq_enable (unsigned int gpio, bool enable);
+void pio_irq_config (unsigned int pin, bool rising, bool falling);
+
+#ifdef PERIPH_PIO_DIRECT
+void pio_direct_start (unsigned int pin, pio_direct* dpio);
+void pio_direct_stop (pio_direct* dpio);
+void pio_direct_inp (pio_direct* dpio);
+void pio_direct_out (pio_direct* dpio);
+void pio_direct_set (pio_direct* dpio, int value);
+void pio_direct_set0 (pio_direct* dpio);
+void pio_direct_set1 (pio_direct* dpio);
+unsigned int pio_direct_get (pio_direct* dpio);
+#endif
 
 #endif
 
@@ -118,6 +136,21 @@ void i2c_abort (void);
 // Analog-to-Digital Converter
 
 unsigned int adc_read (unsigned int chnl, unsigned int rate);
+
+#endif
+
+
+#ifdef PERIPH_TMR
+// ------------------------------------------------
+// Timer peripheral
+
+typedef void (*tmr_cb) (void);
+
+void tmr_start (const void* p, uint32_t psc);
+void tmr_stop (const void* p);
+uint32_t tmr_get (const void* p);
+void tmr_run (const void* p, uint32_t count, tmr_cb cb, bool once);
+void tmr_halt (const void* p);
 
 #endif
 

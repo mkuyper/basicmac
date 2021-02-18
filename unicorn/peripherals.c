@@ -117,6 +117,195 @@ void timer_set (uint64_t target) {
 
 
 // -----------------------------------------------------------------------------
+// 76d5885a-ff99-11ea-9aa3-cd4b514dc224
+//
+// GPIO
+
+typedef struct {
+    uint32_t value;     // 0=lo 1=hi
+    uint32_t outm;      // 0=in 1=out
+    uint32_t outv;      // 0=lo 1=hi
+    uint32_t pdn;       // 0=no 1=yes
+    uint32_t pup;       // 0=no 1=yes
+    uint32_t rise;      // rising edge irq
+    uint32_t fall;      // falling edge irq
+    uint32_t irq;       // pending irq
+} gpio_reg;
+
+static void gpio_irq (void) {
+    // TODO - implement
+}
+
+void gpio_init (void) {
+    static const unsigned char uuid[16] = {
+        0x76, 0xd5, 0x88, 0x5a, 0xff, 0x99, 0x11, 0xea, 0x9a, 0xa3, 0xcd, 0x4b, 0x51, 0x4d, 0xc2, 0x24
+    };
+    preg(HAL_PID_GPIO, uuid);
+    nvic_sethandler(HAL_PID_GPIO, gpio_irq);
+}
+
+void pio_set (unsigned int pin, int value) {
+    gpio_reg* reg = PERIPH_REG(HAL_PID_GPIO);
+    uint32_t mask = 1 << BRD_PIN(pin);
+
+    if( value < 0 ) { // input
+        // auto-pull
+        if( value == PIO_INP_PAU ) {
+            if( pin & BRD_GPIO_ACTIVE_LOW ) {
+                value = PIO_INP_PUP;
+            } else {
+                value = PIO_INP_PDN;
+            }
+        }
+        if( value == PIO_INP_PUP ) {
+            reg->pup |= mask;
+            reg->pdn &= ~mask;
+        } else if( value == PIO_INP_PDN ) {
+            reg->pup &= ~mask;
+            reg->pdn |= mask;
+        } else {
+            reg->pup &= ~mask;
+            reg->pdn &= ~mask;
+        }
+        reg->outm &= ~mask;
+    } else { // output
+        reg->outm |= mask;
+        if( value ) {
+            reg->outv |= mask;
+        } else {
+            reg->outv &= ~mask;
+        }
+    }
+    psvc(HAL_PID_GPIO, 0);
+}
+
+void pio_activate (unsigned int pin, bool active) {
+    pio_set(pin, (pin & BRD_GPIO_ACTIVE_LOW) ? !active : active);
+}
+
+int pio_get (unsigned int pin) {
+    gpio_reg* reg = PERIPH_REG(HAL_PID_GPIO);
+    uint32_t mask = 1 << BRD_PIN(pin);
+    return reg->value & mask;
+}
+
+bool pio_active (unsigned int pin) {
+    bool v = pio_get(pin);
+    if( (pin & BRD_GPIO_ACTIVE_LOW) ) {
+        v = !v;
+    }
+    return v;
+}
+
+void pio_default (unsigned int pin) {
+    pio_set(pin, PIO_INP_HIZ);
+}
+
+void pio_direct_start (unsigned int pin, pio_direct* dpio) {
+    dpio->reg = PERIPH_REG(HAL_PID_GPIO);
+    dpio->mask = 1 << BRD_PIN(pin);
+}
+
+void pio_direct_stop (pio_direct* dpio) {
+}
+
+void pio_direct_inp (pio_direct* dpio) {
+    gpio_reg* reg = dpio->reg;
+    uint32_t mask = dpio->mask;
+    reg->outm &= ~mask;
+    psvc(HAL_PID_GPIO, 0);
+}
+
+void pio_direct_out (pio_direct* dpio) {
+    gpio_reg* reg = dpio->reg;
+    uint32_t mask = dpio->mask;
+    reg->outm |= mask;
+    psvc(HAL_PID_GPIO, 0);
+}
+
+void pio_direct_set (pio_direct* dpio, int value) {
+    if( value ) {
+        pio_direct_set1(dpio);
+    } else {
+        pio_direct_set0(dpio);
+    }
+}
+
+void pio_direct_set0 (pio_direct* dpio) {
+    gpio_reg* reg = dpio->reg;
+    uint32_t mask = dpio->mask;
+    reg->outv &= ~mask;
+    psvc(HAL_PID_GPIO, 0);
+}
+
+void pio_direct_set1 (pio_direct* dpio) {
+    gpio_reg* reg = dpio->reg;
+    uint32_t mask = dpio->mask;
+    reg->outv |= mask;
+    psvc(HAL_PID_GPIO, 0);
+}
+
+unsigned int pio_direct_get (pio_direct* dpio) {
+}
+
+
+// -----------------------------------------------------------------------------
+// a806819e-0134-11eb-a845-f739a072dd5c
+//
+// Fast UART
+
+typedef struct {
+    uint8_t txbuf[1024];
+    uint8_t rxbuf[1024];
+    uint32_t ctrl;
+    uint32_t rxlen;
+    uint32_t txlen;
+} fuart_reg;
+
+enum {
+    FUART_PSVC_SEND,
+    FUART_PSVC_CLEARIRQ,
+};
+
+enum {
+    FUART_C_RXEN = (1 << 0),
+};
+
+static void fuart_irq (void) {
+    fuart_reg* reg = PERIPH_REG(HAL_PID_FUART);
+    fuart_rx_cb(reg->rxbuf, reg->rxlen);
+    reg->ctrl &= ~FUART_C_RXEN;
+    psvc(HAL_PID_FUART, FUART_PSVC_CLEARIRQ);
+}
+
+void fuart_init (void) {
+    static const unsigned char uuid[16] = {
+        0xa8, 0x06, 0x81, 0x9e, 0x01, 0x34, 0x11, 0xeb, 0xa8, 0x45, 0xf7, 0x39, 0xa0, 0x72, 0xdd, 0x5c
+    };
+    preg(HAL_PID_FUART, uuid);
+    nvic_sethandler(HAL_PID_FUART, fuart_irq);
+}
+
+void fuart_tx (unsigned char* buf, int n) {
+    fuart_reg* reg = PERIPH_REG(HAL_PID_FUART);
+    ASSERT(n <= sizeof(reg->txbuf));
+    memcpy(reg->txbuf, buf, n);
+    reg->txlen = n;
+    psvc(HAL_PID_FUART, FUART_PSVC_SEND);
+}
+
+void fuart_rx_start (void) {
+    fuart_reg* reg = PERIPH_REG(HAL_PID_FUART);
+    reg->ctrl |= FUART_C_RXEN;
+}
+
+void fuart_rx_stop (void) {
+    fuart_reg* reg = PERIPH_REG(HAL_PID_FUART);
+    reg->ctrl &= ~FUART_C_RXEN;
+}
+
+
+// -----------------------------------------------------------------------------
 // 3888937c-ab4c-11ea-aeed-27009b59e638
 //
 // Radio

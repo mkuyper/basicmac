@@ -91,7 +91,7 @@ variant: $(VTARGET)
 variants: $(VTARGETS)
 
 variant-%:
-	$(MAKE) -j 6 variant VARIANT=$*
+	$(MAKE) -j8 variant VARIANT=$*
 
 all: $(ALL)
 

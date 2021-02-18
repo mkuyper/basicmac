@@ -29,6 +29,9 @@ static struct {
     u4_t ticks;
     int watchcount;
     u4_t reset;
+#ifdef CFG_DEBUG
+    u4_t debug_suspend;
+#endif
 #ifdef CFG_rtstats
     struct {
         uint32_t run;                   // ticks running
@@ -1073,26 +1076,13 @@ const irqdef HAL_irqdefs[] = {
 #endif
 #endif
 
-#if defined(BRD_PWM_TIM)
-#if BRD_PWM_TIM == 3
-    { TIM3_IRQn, pwm_irq },
+#if defined(BRD_TMR)
+#if BRD_TMR_EN(BRD_TIM2)
+    { TIM2_IRQn, tmr_t2_irq },
 #endif
+#if BRD_TMR_EN(BRD_TIM3)
+    { TIM3_IRQn, tmr_t3_irq },
 #endif
-
-#if defined(BRD_PIR_TIM)
-#if BRD_PIR_TIM == 3
-    { TIM3_IRQn, pir_tim_irq },
-#endif
-#endif
-
-#if defined(BRD_LED_TIM)
-#if BRD_LED_TIM == 2
-    { TIM2_IRQn, leds_pwm_irq },
-#endif
-#endif
-
-#if defined(BRD_IR_TIM)
-    { TIM2_IRQn, ir_tim_irq },
 #endif
 
 #if defined(HW_DMA)
@@ -1119,9 +1109,13 @@ void hal_setBattLevel (u1_t level) {
 
 #ifdef CFG_DEBUG
 
-static void debug_init (void) {
-    // configure USART (2000000/8N1, tx-only)
+static void debug_uartconfig (void) {
+    // configure USART (2000000/8N1)
     usart_start(BRD_DBG_UART, 2000000);
+}
+
+static void debug_init (void) {
+    debug_uartconfig();
 #if CFG_DEBUG != 0
     debug_str("\r\n============== DEBUG STARTED ==============\r\n");
 #endif
@@ -1135,6 +1129,21 @@ void hal_debug_led (int val) {
 #if defined(GPIO_DBG_LED)
     leds_set(GPIO_DBG_LED, val);
 #endif
+}
+
+void hal_debug_suspend (void) {
+    if( HAL.debug_suspend == 0 ) {
+        usart_stop(BRD_DBG_UART);
+    }
+    HAL.debug_suspend += 1;
+}
+
+void hal_debug_resume (void) {
+    ASSERT(HAL.debug_suspend);
+    HAL.debug_suspend -= 1;
+    if( HAL.debug_suspend == 0 ) {
+        debug_uartconfig();
+    }
 }
 
 #endif
