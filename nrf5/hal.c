@@ -13,6 +13,7 @@
 
 #include "nrfx_clock.h"
 #include "nrfx_gpiote.h"
+#include "nrfx_rng.h"
 #include "nrfx_rtc.h"
 #include "nrfx_spim.h"
 #include "nrfx_timer.h"
@@ -65,6 +66,7 @@ static inline void nrfx_uarte_resume (nrfx_uarte_t const * p_instance) {
 enum {
     PANIC_HAL_FAILED    = 0,
     PANIC_LFCLK_NOSTART = 1,
+    PANIC_RNG_TIMEOUT   = 2,
 };
 
 __attribute__((noreturn))
@@ -493,6 +495,36 @@ void hal_irqmask_set (int mask) {
 }
 
 
+// -----------------------------------------------------------------------------
+// RNG
+
+static struct {
+    uint8_t* buf;
+    int n;
+} rng_state;
+
+void rng_ev (uint8_t rnd) {
+    *rng_state.buf++ = rnd;
+    if( --rng_state.n == 0 ) {
+        nrfx_rng_stop();
+    }
+}
+
+void trng_next (uint32_t* dest, int count) {
+    if( count > 0) {
+        nrfx_rng_config_t cfg = NRFX_RNG_DEFAULT_CONFIG;
+        if( nrfx_rng_init(&cfg, rng_ev) != NRFX_SUCCESS ) {
+            hal_failed();
+        }
+        rng_state.buf = (uint8_t*) dest;
+        rng_state.n = count << 2;
+        nrfx_rng_start();
+        SAFE_while(PANIC_RNG_TIMEOUT, ( *((volatile int*) &rng_state.n) > 0 ));
+        nrfx_rng_uninit();
+    }
+}
+
+
 #ifdef CFG_DEBUG
 // -----------------------------------------------------------------------------
 // Debug
@@ -601,6 +633,7 @@ const irqdef HAL_irqdefs[] = {
     { RTC1_IRQn, nrfx_rtc_1_irq_handler },
     { GPIOTE_IRQn, nrfx_gpiote_irq_handler },
     { POWER_CLOCK_IRQn, nrfx_clock_irq_handler },
+    { RNG_IRQn, nrfx_rng_irq_handler },
 
     { ~0, NULL } // end of list
 };
