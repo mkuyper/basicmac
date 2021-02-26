@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
+// Copyright (C) 2020-2021 Michael Kuyper. All rights reserved.
 //
 // This file is subject to the terms and conditions defined in file 'LICENSE',
 // which is part of this source code package.
@@ -11,9 +11,9 @@
 
 #include "hal/nrf_ppi.h"
 
-#include "nrfx_clock.h"
+#include "nrf_nvic.h"
+
 #include "nrfx_gpiote.h"
-#include "nrfx_rng.h"
 #include "nrfx_rtc.h"
 #include "nrfx_spim.h"
 #include "nrfx_timer.h"
@@ -32,6 +32,7 @@ static struct {
     uint32_t ticks;
 
     boot_boottab* boottab;
+    uint8_t nested;
 } HAL;
 
 
@@ -64,9 +65,8 @@ static inline void nrfx_uarte_resume (nrfx_uarte_t const * p_instance) {
 
 // don't change these values, so we know what they are in the field...
 enum {
-    PANIC_HAL_FAILED    = 0,
-    PANIC_LFCLK_NOSTART = 1,
-    PANIC_RNG_TIMEOUT   = 2,
+    PANIC_HAL_FAILED    = NRF_FAULT_ID_APP_RANGE_START + 0,
+    PANIC_RNG_TIMEOUT   = NRF_FAULT_ID_APP_RANGE_START + 1,
 };
 
 __attribute__((noreturn))
@@ -96,14 +96,26 @@ void hal_watchcount (int cnt) {
     // TODO - implement?
 }
 
+
 void hal_disableIRQs (void) {
-    __disable_irq();
-    HAL.irqlevel++;
+    uint8_t nested;
+    if( sd_nvic_critical_region_enter(&nested) != NRF_SUCCESS ) {
+        hal_failed();
+    }
+    if( HAL.irqlevel++ == 0 ) {
+        HAL.nested = nested;
+    } else {
+        if( sd_nvic_critical_region_exit(nested) != NRF_SUCCESS ) {
+            hal_failed();
+        }
+    }
 }
 
 void hal_enableIRQs (void) {
-    if(--HAL.irqlevel == 0) {
-        __enable_irq();
+    if( --HAL.irqlevel == 0 ) {
+        if( sd_nvic_critical_region_exit(HAL.nested) != NRF_SUCCESS ) {
+            hal_failed();
+        }
     }
 }
 
@@ -125,19 +137,47 @@ __attribute__((always_inline)) static inline uint32_t getpc (void) {
 
 
 // -----------------------------------------------------------------------------
+// Soft Device (SD132)
+
+nrf_nvic_state_t nrf_nvic_state; // required for SD NVIC module
+
+static void sd_fault_handler (uint32_t id, uint32_t pc, uint32_t info) {
+    panic(id, pc);
+}
+
+static void sd_init (void) {
+    nrf_clock_lf_cfg_t cfg = {
+        .source = NRF_CLOCK_LF_SRC_XTAL,
+        .accuracy = NRF_CLOCK_LF_ACCURACY_20_PPM,
+    };
+    if( sd_softdevice_enable(&cfg, sd_fault_handler) != NRF_SUCCESS ) {
+        hal_failed();
+    }
+}
+
+
+// -----------------------------------------------------------------------------
+// NRFX Glue
+
+bool _nrfx_irq_is_pending (uint32_t irq_number) {
+    uint32_t pending;
+    if( sd_nvic_GetPendingIRQ(irq_number, &pending) != NRF_SUCCESS ) {
+        hal_failed();
+    }
+    return pending;
+}
+
+
+// -----------------------------------------------------------------------------
 // Clock and Time
 
 static const nrfx_rtc_t rtc1 = NRFX_RTC_INSTANCE(1);
 
 static void rtc1_handler (nrfx_rtc_int_type_t int_type) {
-    debug_printf("RTC1 handler (%d)\r\n", (int) int_type); // XXX
+    //debug_printf("RTC1 handler (%d)\r\n", (int) int_type); // XXX
     if( int_type == NRFX_RTC_INT_OVERFLOW ) {
         HAL.ticks += 1;
     }
-}
-
-static void clock_handler (nrfx_clock_evt_type_t event) {
-    debug_printf("clock handler\r\n");
 }
 
 static void clock_init (void) {
@@ -149,13 +189,6 @@ static void clock_init (void) {
     };
 
     nrfx_err_t rv;
-    rv = nrfx_clock_init(clock_handler);
-    ASSERT(rv == NRFX_SUCCESS);
-
-    nrfx_clock_enable(); // this is necessary to switch clock source
-    nrfx_clock_start(NRF_CLOCK_DOMAIN_LFCLK);
-    SAFE_while(PANIC_LFCLK_NOSTART, !nrfx_clock_is_running(NRF_CLOCK_DOMAIN_LFCLK, NULL));
-
     rv = nrfx_rtc_init(&rtc1, &cfg, rtc1_handler);
     ASSERT(rv == NRFX_SUCCESS);
 
@@ -199,8 +232,9 @@ void hal_sleep (u1_t type, u4_t targettime) {
     ASSERT(rv == NRFX_SUCCESS);
 
     if( ((s4_t) xticks_unsafe()) - ((s4_t) targettime) < 0 ) {
-        // TODO - use softdevice if enabled
-        asm volatile("wfi");
+        SCB->SCR |= SCB_SCR_SEVONPEND_Msk;
+        sd_app_evt_wait();
+        //asm volatile("wfi");
     }
 
     nrfx_rtc_cc_disable(&rtc1, 0);
@@ -496,32 +530,11 @@ void hal_irqmask_set (int mask) {
 
 
 // -----------------------------------------------------------------------------
-// RNG
-
-static struct {
-    uint8_t* buf;
-    int n;
-} rng_state;
-
-void rng_ev (uint8_t rnd) {
-    *rng_state.buf++ = rnd;
-    if( --rng_state.n == 0 ) {
-        nrfx_rng_stop();
-    }
-}
+// TRNG
 
 void trng_next (uint32_t* dest, int count) {
-    if( count > 0) {
-        nrfx_rng_config_t cfg = NRFX_RNG_DEFAULT_CONFIG;
-        if( nrfx_rng_init(&cfg, rng_ev) != NRFX_SUCCESS ) {
-            hal_failed();
-        }
-        rng_state.buf = (uint8_t*) dest;
-        rng_state.n = count << 2;
-        nrfx_rng_start();
-        SAFE_while(PANIC_RNG_TIMEOUT, ( *((volatile int*) &rng_state.n) > 0 ));
-        nrfx_rng_uninit();
-    }
+    ASSERT(count < 64);
+    SAFE_while(PANIC_RNG_TIMEOUT, sd_rand_application_vector_get((uint8_t*) dest, count << 2) == NRF_SUCCESS);
 }
 
 
@@ -616,13 +629,17 @@ void hal_fwinfo (hal_fwi* fwi) {
 void hal_init (void* bootarg) {
     HAL.boottab = bootarg;
 
+    sd_init();
+
 #ifdef CFG_DEBUG
     debug_init();
 #endif
+
     hal_pd_init();
     clock_init();
     dio_init();
     radio_spi_init();
+
 }
 
 
@@ -632,8 +649,6 @@ void hal_init (void* bootarg) {
 const irqdef HAL_irqdefs[] = {
     { RTC1_IRQn, nrfx_rtc_1_irq_handler },
     { GPIOTE_IRQn, nrfx_gpiote_irq_handler },
-    { POWER_CLOCK_IRQn, nrfx_clock_irq_handler },
-    { RNG_IRQn, nrfx_rng_irq_handler },
 
     { ~0, NULL } // end of list
 };

@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
+// Copyright (C) 2020-2021 Michael Kuyper. All rights reserved.
 //
 // This file is subject to the terms and conditions defined in file 'LICENSE',
 // which is part of this source code package.
@@ -28,5 +28,7 @@ typedef struct {
 extern const irqdef HAL_irqdefs[];
 
 #define HAL_IRQ_PRIORITY        5
+
+bool _nrfx_irq_is_pending (uint32_t irq_number);
 
 #endif

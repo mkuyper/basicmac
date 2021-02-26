@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
+// Copyright (C) 2020-2021 Michael Kuyper. All rights reserved.
 //
 // This file is subject to the terms and conditions defined in file 'LICENSE',
 // which is part of this source code package.
@@ -7,6 +7,8 @@
 #define _nrfx_glue_h_
 
 #include "lmic.h"
+
+#include "nrf_nvic.h"
 
 // -----------------------------------------------------------------------------
 
@@ -19,11 +21,15 @@
 // -----------------------------------------------------------------------------
 
 #define NRFX_IRQ_PRIORITY_SET(irq_number, priority) do { \
-    NVIC_SetPriority(irq_number, priority); \
+    if( sd_nvic_SetPriority(irq_number, priority) != NRF_SUCCESS ) { \
+        hal_failed(); \
+    } \
 } while( 0 )
 
 #define NRFX_IRQ_ENABLE(irq_number) do { \
-    NVIC_EnableIRQ(irq_number); \
+    if( sd_nvic_EnableIRQ(irq_number) != NRF_SUCCESS ) { \
+        hal_failed(); \
+    } \
 } while( 0 )
 
 #define NRFX_IRQ_IS_ENABLED(irq_number) \
@@ -33,19 +39,25 @@ static inline bool _nrfx_irq_is_enabled (unsigned int irq_number) {
 }
 
 #define NRFX_IRQ_DISABLE(irq_number) do { \
-    NVIC_DisableIRQ(irq_number); \
+    if( sd_nvic_DisableIRQ(irq_number) != NRF_SUCCESS ) { \
+        hal_failed(); \
+    } \
 } while( 0 )
 
 #define NRFX_IRQ_PENDING_SET(irq_number) do { \
-    NVIC_SetPendingIRQ(irq_number); \
+    if( sd_nvic_SetPendingIRQ(irq_number) != NRF_SUCCESS ) { \
+        hal_failed(); \
+    } \
 } while( 0 )
 
 #define NRFX_IRQ_PENDING_CLEAR(irq_number) do { \
-    NVIC_ClearPendingIRQ(irq_number); \
+    if( sd_nvic_ClearPendingIRQ(irq_number) != NRF_SUCCESS ) { \
+        hal_failed(); \
+    } \
 } while( 0 )
 
 #define NRFX_IRQ_IS_PENDING(irq_number) \
-    ( NVIC_GetPendingIRQ(irq_number) != 0 )
+    _nrfx_irq_is_pending(irq_number)
 
 #define NRFX_CRITICAL_SECTION_ENTER() do { \
     hal_disableIRQs(); \
@@ -56,4 +68,3 @@ static inline bool _nrfx_irq_is_enabled (unsigned int irq_number) {
 }
 
 #endif
-
