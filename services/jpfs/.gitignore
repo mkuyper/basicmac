@@ -1,0 +1,5 @@
+*.o
+*.d
+jpfs
+*.gc*
+coverage*.html
