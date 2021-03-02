@@ -48,7 +48,16 @@
 #error "Missing radio configuration"
 #endif
 
+// Enabled USART peripherals
+#define BRD_USART       (BRD_UARTE0)
+
+#define GPIO_UARTE0_RX  26
+#define GPIO_UARTE0_TX  27
+
+// Debug LED / USART
 #define GPIO_DBG_LED    (7 | BRD_GPIO_ACTIVE_LOW)
-#define GPIO_DBG_TX     27
+#define BRD_DBG_UART    BRD_UARTE0_PORT
+
+#define GPIO_DBG_LED    (7 | BRD_GPIO_ACTIVE_LOW)
 
 #endif

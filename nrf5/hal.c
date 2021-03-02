@@ -19,6 +19,8 @@
 #include "nrfx_timer.h"
 #include "nrfx_uarte.h"
 
+#include "nrfx_helpers.h"
+
 // Important Note: This HAL is currently written for the nRF52832 with S132,
 // and assumptions may be made that do not hold true for other nRF5x MCUs and
 // SoftDevices.
@@ -31,33 +33,13 @@ static struct {
     s4_t irqlevel;
     uint32_t ticks;
 
+#ifdef CFG_DEBUG
+    u4_t debug_suspend;
+#endif
+
     boot_boottab* boottab;
     uint8_t nested;
 } HAL;
-
-
-// -----------------------------------------------------------------------------
-// Things that should be in nrfx ;-)
-
-static inline bool nrfx_rtc_overflow_pending (nrfx_rtc_t const * p_instance) {
-    return nrf_rtc_event_check(p_instance->p_reg, NRF_RTC_EVENT_OVERFLOW);
-}
-
-static inline void nrfx_spim_suspend (nrfx_spim_t const * p_instance) {
-    nrf_spim_disable(p_instance->p_reg);
-}
-
-static inline void nrfx_spim_resume (nrfx_spim_t const * p_instance) {
-    nrf_spim_enable(p_instance->p_reg);
-}
-
-static inline void nrfx_uarte_suspend (nrfx_uarte_t const * p_instance) {
-    nrf_uarte_disable(p_instance->p_reg);
-}
-
-static inline void nrfx_uarte_resume (nrfx_uarte_t const * p_instance) {
-    nrf_uarte_enable(p_instance->p_reg);
-}
 
 
 // -----------------------------------------------------------------------------
@@ -380,22 +362,68 @@ void hal_pin_busy_wait (void) {
 
 
 // -----------------------------------------------------------------------------
-// Radio interrupt handling
+// Timer
 
-static const nrfx_timer_t dio_timer = NRFX_TIMER_INSTANCE(1);
-static u4_t dio_tick_base;
+static const nrfx_timer_t timer1 = NRFX_TIMER_INSTANCE(1);
+static struct {
+    uint32_t mask;
+    uint32_t tick_base;
+} tmr;
 
-enum {
-    DIO_PPICH_CLOCK = NRF_PPI_CHANNEL0,
-    DIO_PPICH_DIO   = NRF_PPI_CHANNEL1,
-};
-enum {
-    DIO_TMRCH_DIO,
-};
-
-static void dio_timer_handler (nrf_timer_event_t event_type, void* p_context) {
-    debug_printf("dio timer handler\r\n");
+static void tmr_handler (nrf_timer_event_t event_type, void* p_context) {
+    debug_printf("timer handler\r\n");
 }
+
+static void tmr_init (void) {
+    static const nrfx_timer_config_t cfg = {
+        .mode = NRF_TIMER_MODE_COUNTER,
+        .bit_width = NRF_TIMER_BIT_WIDTH_32,
+        .interrupt_priority = HAL_IRQ_PRIORITY,
+    };
+
+    nrfx_err_t rv;
+    rv = nrfx_timer_init(&timer1, &cfg, tmr_handler);
+    ASSERT(rv == NRFX_SUCCESS);
+
+    // PPI: RTC tick -> Timer count
+    nrf_ppi_channel_endpoint_setup(NRF_PPI, HAL_PPICH_CLOCK,
+            nrfx_rtc_event_address_get(&rtc1, NRF_RTC_EVENT_TICK),
+            nrfx_timer_task_address_get(&timer1, NRF_TIMER_TASK_COUNT));
+}
+
+void tmr_start (uint32_t cid) {
+    hal_disableIRQs();
+    if( tmr.mask == 0 ) {
+        nrfx_rtc_tick_enable(&rtc1, false);
+        nrfx_timer_clear(&timer1);
+        nrfx_timer_enable(&timer1);
+        nrf_ppi_channel_enable(NRF_PPI, HAL_PPICH_CLOCK);
+        nrf_ppi_channel_enable(NRF_PPI, HAL_PPICH_DIO);
+        tmr.tick_base = xticks_unsafe();
+    }
+    tmr.mask |= (1 << cid);
+    hal_enableIRQs();
+}
+
+void tmr_stop (uint32_t cid) {
+    hal_disableIRQs();
+    tmr.mask &= ~(1 << cid);
+    if( tmr.mask == 0 ) {
+        nrf_ppi_channel_disable(NRF_PPI, HAL_PPICH_CLOCK);
+        nrf_ppi_channel_disable(NRF_PPI, HAL_PPICH_DIO);
+        nrfx_timer_disable(&timer1);
+        nrfx_rtc_tick_disable(&rtc1);
+    }
+    hal_enableIRQs();
+}
+
+uint32_t tmr_cc_get (uint32_t ch) {
+    return tmr.tick_base + nrfx_timer_capture_get(&timer1, ch);
+}
+
+
+// -----------------------------------------------------------------------------
+// Radio interrupt handling
 
 static void dio_pin_handler (nrfx_gpiote_pin_t pin, nrf_gpiote_polarity_t action) {
     int mask = 0;
@@ -419,7 +447,7 @@ static void dio_pin_handler (nrfx_gpiote_pin_t pin, nrf_gpiote_polarity_t action
         mask |= HAL_IRQMASK_DIO3;
     }
 #endif
-    u4_t tstamp = dio_tick_base + nrfx_timer_capture_get(&dio_timer, DIO_TMRCH_DIO);
+    uint32_t tstamp = tmr_cc_get(HAL_TMRCH_DIO);
 
     hal_disableIRQs();
     radio_irq_handler(mask, (ostime_t) tstamp);
@@ -427,16 +455,7 @@ static void dio_pin_handler (nrfx_gpiote_pin_t pin, nrf_gpiote_polarity_t action
 }
 
 static void dio_init (void) {
-    static const nrfx_timer_config_t cfg = {
-        .mode = NRF_TIMER_MODE_COUNTER,
-        .bit_width = NRF_TIMER_BIT_WIDTH_24,
-        .interrupt_priority = HAL_IRQ_PRIORITY,
-    };
-
     nrfx_err_t rv;
-    rv = nrfx_timer_init(&dio_timer, &cfg, dio_timer_handler);
-    ASSERT(rv == NRFX_SUCCESS);
-
     rv = nrfx_gpiote_init(HAL_IRQ_PRIORITY);
     ASSERT(rv == NRFX_SUCCESS);
 
@@ -462,33 +481,10 @@ static void dio_init (void) {
     ASSERT(rv == NRFX_SUCCESS);
 #endif
 
-    // PPI: RTC tick -> Timer count
-    nrf_ppi_channel_endpoint_setup(NRF_PPI, DIO_PPICH_CLOCK,
-            nrfx_rtc_event_address_get(&rtc1, NRF_RTC_EVENT_TICK),
-            nrfx_timer_task_address_get(&dio_timer, NRF_TIMER_TASK_COUNT));
-
     // PPI: GPIOTE PORT event -> Timer capture
-    nrf_ppi_channel_endpoint_setup(NRF_PPI, DIO_PPICH_DIO,
+    nrf_ppi_channel_endpoint_setup(NRF_PPI, HAL_PPICH_DIO,
             nrf_gpiote_event_address_get(NRF_GPIOTE, NRF_GPIOTE_EVENT_PORT),
-            nrfx_timer_capture_task_address_get(&dio_timer, DIO_TMRCH_DIO));
-}
-
-static void dio_timer_start (void) {
-    hal_disableIRQs();
-    nrfx_rtc_tick_enable(&rtc1, false);
-    nrfx_timer_clear(&dio_timer);
-    nrfx_timer_enable(&dio_timer);
-    nrf_ppi_channel_enable(NRF_PPI, DIO_PPICH_CLOCK);
-    nrf_ppi_channel_enable(NRF_PPI, DIO_PPICH_DIO);
-    dio_tick_base = xticks_unsafe();
-    hal_enableIRQs();
-}
-
-static void dio_timer_stop (void) {
-    nrf_ppi_channel_disable(NRF_PPI, DIO_PPICH_CLOCK);
-    nrf_ppi_channel_disable(NRF_PPI, DIO_PPICH_DIO);
-    nrfx_timer_disable(&dio_timer);
-    nrfx_rtc_tick_disable(&rtc1);
+            nrfx_timer_capture_task_address_get(&timer1, HAL_TMRCH_DIO));
 }
 
 static inline void dio_config(unsigned int pin, bool on) {
@@ -520,9 +516,9 @@ void hal_irqmask_set (int mask) {
     mask = (mask != 0);
     if( prevmask != mask ) {
         if( mask ) {
-            dio_timer_start();
+            tmr_start(HAL_TMRCID_DIO);
         } else {
-            dio_timer_stop();
+            tmr_stop(HAL_TMRCID_DIO);
         }
         prevmask = mask;
     }
@@ -542,54 +538,34 @@ void trng_next (uint32_t* dest, int count) {
 // -----------------------------------------------------------------------------
 // Debug
 
-static const nrfx_uarte_t debug_port = NRFX_UARTE_INSTANCE(0);
-static bool debug_active;
+static void debug_uartconfig (void) {
+    // configure USART (115200/8N1)
+    usart_start(BRD_DBG_UART, 115200);
+}
 
 static void debug_init (void) {
-    nrfx_uarte_config_t cfg = {
-        .pseltxd            = BRD_GPIO_PIN(GPIO_DBG_TX),
-        .pselrxd            = NRF_UARTE_PSEL_DISCONNECTED,
-        .pselcts            = NRF_UARTE_PSEL_DISCONNECTED,
-        .pselrts            = NRF_UARTE_PSEL_DISCONNECTED,
-        .p_context          = NULL,
-        .baudrate           = NRF_UARTE_BAUDRATE_115200,
-        .interrupt_priority = HAL_IRQ_PRIORITY,
-        .hal_cfg            = {
-            .hwfc           = NRF_UARTE_HWFC_DISABLED,
-            .parity         = NRF_UARTE_PARITY_EXCLUDED,
-        }
-    };
-
-    pio_set(GPIO_DBG_TX, 1);
-
-    if( nrfx_uarte_init(&debug_port, &cfg, NULL) != NRFX_SUCCESS ) {
-        hal_failed();
-    }
-    nrfx_uarte_suspend(&debug_port);
-
-    debug_active = true;
-
+    debug_uartconfig();
 #if CFG_DEBUG != 0
     debug_str("\r\n============== DEBUG STARTED ==============\r\n");
 #endif
 }
 
-static void debug_strbuf (const unsigned char* buf, int n) {
-    nrfx_uarte_resume(&debug_port);
-    nrfx_uarte_tx(&debug_port, buf, n);
-    nrfx_uarte_suspend(&debug_port);
+void hal_debug_str (const char* str) {
+    usart_str(BRD_DBG_UART, str);
 }
 
-void hal_debug_str (const char* str) {
-    if( debug_active) {
-        int n = strlen(str);
-        if( (uintptr_t) str < 0x2000000 || (uintptr_t) str > 0x20010000 ) {
-            unsigned char buf[n];
-            memcpy(buf, str, n);
-            debug_strbuf(buf, n);
-        } else {
-            debug_strbuf((const unsigned char*) str, n);
-        }
+void hal_debug_suspend (void) {
+    if( HAL.debug_suspend == 0 ) {
+        usart_stop(BRD_DBG_UART);
+    }
+    HAL.debug_suspend += 1;
+}
+
+void hal_debug_resume (void) {
+    ASSERT(HAL.debug_suspend);
+    HAL.debug_suspend -= 1;
+    if( HAL.debug_suspend == 0 ) {
+        debug_uartconfig();
     }
 }
 
@@ -605,6 +581,8 @@ void hal_debug_led (int val) {
 
 #endif
 
+
+// -----------------------------------------------------------------------------
 u4_t hal_unique (void) {
     return NRF_FICR->DEVICEID[0];
 }
@@ -637,6 +615,7 @@ void hal_init (void* bootarg) {
 
     hal_pd_init();
     clock_init();
+    tmr_init();
     dio_init();
     radio_spi_init();
 
@@ -649,6 +628,10 @@ void hal_init (void* bootarg) {
 const irqdef HAL_irqdefs[] = {
     { RTC1_IRQn, nrfx_rtc_1_irq_handler },
     { GPIOTE_IRQn, nrfx_gpiote_irq_handler },
+
+#if BRD_USART_EN(BRD_UARTE0)
+    { UART0_IRQn, nrfx_uarte_0_irq_handler },
+#endif
 
     { ~0, NULL } // end of list
 };

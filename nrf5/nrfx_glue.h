@@ -67,4 +67,6 @@ static inline bool _nrfx_irq_is_enabled (unsigned int irq_number) {
     hal_enableIRQs(); \
 }
 
+#define NRFX_PPI_CHANNELS_USED ((1 << HAL_PPICH_MAX) - 1)
+
 #endif

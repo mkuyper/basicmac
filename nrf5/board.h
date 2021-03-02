@@ -18,6 +18,15 @@
 #define BRD_GPIO_ACTIVE_LOW     (1 << 8)
 
 
+// ------------------------------------------------
+// UART instances
+#define BRD_UARTE0              (1 << 0)
+#define BRD_USART_EN(m)         ( ((BRD_USART) & (m)) != 0 )
+
+// UART ports
+#define BRD_UARTE0_PORT         usart_port_u0
+
+
 #ifdef BRD_IMPL_INC
 #include BRD_IMPL_INC
 #else

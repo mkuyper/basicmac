@@ -6,6 +6,7 @@
 #ifndef _nrfx_config_h_
 #define _nrfx_config_h_
 
+#include "board.h"
 
 // CLOCK
 #define NRFX_CLOCK_ENABLED 1
@@ -25,8 +26,12 @@
 #define NRFX_TIMER1_ENABLED 1
 
 // UARTE
+#ifdef BRD_USART
 #define NRFX_UARTE_ENABLED 1
+#if BRD_USART_EN(BRD_UARTE0)
 #define NRFX_UARTE0_ENABLED 1
+#endif
+#endif
 
 // SPIM
 #define NRFX_SPIM_ENABLED 1
