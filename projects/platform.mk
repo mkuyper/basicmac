@@ -1,4 +1,4 @@
-# Copyright (C) 2020-2020 Michael Kuyper. All rights reserved.
+# Copyright (C) 2020-2021 Michael Kuyper. All rights reserved.
 # Copyright (C) 2016-2019 Semtech (International) AG. All rights reserved.
 #
 # This file is subject to the terms and conditions defined in file 'LICENSE',
@@ -96,6 +96,7 @@ endif
 ifeq ($(MCU:NRF52832%=NRF52832),NRF52832)
     SOFTDEVICE	:= s132
 endif
+    SVCSDIRS	+= $(HALDIR)
     SRCS	+= $(foreach d,$(NRFX_DRIVERS),nrfx/drivers/src/nrfx_$(d).c)
     ALL		+= $(BUILDDIR)/$(PROJECT).hex
     ALL		+= $(BUILDDIR)/$(PROJECT).bin

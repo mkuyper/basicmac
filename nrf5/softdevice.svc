@@ -1,0 +1,9 @@
+# Copyright (C) 2020-2021 Michael Kuyper. All rights reserved.
+#
+# This file is subject to the terms and conditions defined in file 'LICENSE',
+# which is part of this source code package.
+
+hooks:
+    - void sd_event (void)
+
+# vim: syntax=yaml

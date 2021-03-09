@@ -21,6 +21,8 @@
 
 #include "nrfx_helpers.h"
 
+#include "svcdefs.h"
+
 // Important Note: This HAL is currently written for the nRF52832 with S132,
 // and assumptions may be made that do not hold true for other nRF5x MCUs and
 // SoftDevices.
@@ -135,6 +137,13 @@ static void sd_init (void) {
     if( sd_softdevice_enable(&cfg, sd_fault_handler) != NRF_SUCCESS ) {
         hal_failed();
     }
+    NRFX_IRQ_ENABLE(SD_EVT_IRQn);
+}
+
+static void sd_handler (void) {
+#ifdef SVC_softdevice
+    SVCHOOK_sd_event();
+#endif
 }
 
 
@@ -320,8 +329,8 @@ void hal_ant_switch (u1_t val) {
     }
 #endif
     if( val == HAL_ANTSW_OFF ) {
-#ifdef GPIO_ANT_TXRX_EN
-        pio_set(GPIO_ANT_TXRX_EN, 0);
+#ifdef GPIO_ANT_EN
+        pio_set(GPIO_ANT_EN, 0);
 #endif
     } else {
 #ifdef SVC_pwrman
@@ -329,8 +338,8 @@ void hal_ant_switch (u1_t val) {
         ctype = (val == HAL_ANTSW_RX) ? PWRMAN_C_RX : PWRMAN_C_TX;
         radio_ua = LMIC.radioPwr_ua;
 #endif
-#ifdef GPIO_ANT_TXRX_EN
-        pio_set(GPIO_ANT_TXRX_EN, 1);
+#ifdef GPIO_ANT_EN
+        pio_set(GPIO_ANT_EN, 1);
 #endif
     }
 #ifdef GPIO_ANT_RX
@@ -353,10 +362,10 @@ void hal_pin_rst (u1_t val) {
 }
 
 void hal_pin_busy_wait (void) {
-#ifdef GPIO_BUSY
-    pio_set(GPIO_BUSY, PIO_INP_HIZ);
-    while( pio_get(GPIO_BUSY) != 0 );
-    pio_default(GPIO_BUSY);
+#ifdef GPIO_SX_BUSY
+    pio_set(GPIO_SX_BUSY, PIO_INP_HIZ);
+    while( pio_get(GPIO_SX_BUSY) != 0 );
+    pio_default(GPIO_SX_BUSY);
 #endif
 }
 
@@ -628,6 +637,7 @@ void hal_init (void* bootarg) {
 const irqdef HAL_irqdefs[] = {
     { RTC1_IRQn, nrfx_rtc_1_irq_handler },
     { GPIOTE_IRQn, nrfx_gpiote_irq_handler },
+    { SD_EVT_IRQn, sd_handler },
 
 #if BRD_USART_EN(BRD_UARTE0)
     { UART0_IRQn, nrfx_uarte_0_irq_handler },
