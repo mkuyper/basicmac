@@ -71,9 +71,12 @@
 //#define GPIO_DBG_LED  BRD_GPIO(PORT_A, 5) // -- LED is shared with SCK!!
 #define BRD_DBG_UART    BRD_USART2_PORT
 
+// User button
+#define GPIO_BUTTON     BRD_GPIO_EX(PORT_C, 13, BRD_GPIO_ACTIVE_LOW)
+
 // Personalization UART
 #define BRD_PERSO_UART  BRD_USART2_PORT
-#define GPIO_PERSO_DET  GPIO_USART2_RX
+#define GPIO_PERSO_DET  GPIO_BUTTON
 
 // power consumption
 
