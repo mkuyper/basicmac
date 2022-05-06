@@ -55,7 +55,7 @@ A FUOTA session is the process of reconstructing the original firmware update fi
 Fragmentation
 -------------
 
-To deliver a firmware update over LoRaWAN, the update file (``.up``) needs to be split into smaller fragments and must be redundancy-encoded. The size of the fragments (*frag-size*) must be chosen so that it always fits in the allowed LoRaWAN payload size of the region and data rate in use. Additionally the fragment size mut be a multiple of 4 bytes. See example script ``fragger.py`` for generation of fragment data and downlink payloads.
+To deliver a firmware update over LoRaWAN, the update file (``.up``) needs to be split into smaller fragments and must be redundancy-encoded. The size of the fragments (*frag-size*) must be chosen so that it always fits in the allowed LoRaWAN payload size of the region and data rate in use. Additionally the fragment size must be a multiple of 4 bytes. See example script ``fragger.py`` for generation of fragment data and downlink payloads.
 
 
 Example Application ex-fuota
