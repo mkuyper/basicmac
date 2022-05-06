@@ -48,7 +48,7 @@ class FragCarousel:
 
     def chunk(self, cid:int) -> bytes:
         cb = self.cbg.generate(self.cct, cid)
-        chunk = bitarray(self.csz * 8)
+        chunk = bitarray(self.csz * 8, endian='little')
         chunk.setall(0)
         for c in range(self.cct):
             if cb[c]:
