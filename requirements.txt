@@ -1,3 +1,4 @@
+bitarray
 cobs
 colorama
 intelhex

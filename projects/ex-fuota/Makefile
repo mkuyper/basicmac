@@ -29,7 +29,7 @@ include ../projects.gmk
 
 ifeq (simul,$(VARIANT))
 test: build-$(VARIANT)/$(PROJECT).hex $(BL_BUILD)/bootloader.hex
-	PYTHONPATH=$${PYTHONPATH}:$(TOPDIR)/unicorn/simul:$(SVCSDIR)/perso \
+	PYTHONPATH=$${PYTHONPATH}:$(TOPDIR)/unicorn/simul:$(SVCSDIR)/fuota:$(TOPDIR)/basicloader/tools/fwtool \
 		   TEST_HEXFILES='$^' \
 		   ward $(WARDOPTS)
 endif
