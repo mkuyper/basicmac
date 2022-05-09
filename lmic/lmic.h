@@ -15,6 +15,10 @@
 #include "lorabase.h"
 #include "lce.h"
 
+#ifdef __cplusplus
+extern "C"{
+#endif
+
 // LMIC version
 #define LMIC_VERSION_MAJOR 2
 #define LMIC_VERSION_MINOR 1
@@ -129,7 +133,7 @@ typedef struct {
     u1_t                beaconLen;              // beacon length
     ostime_t            beaconAirtime;          // beacon air time
     eirp_t              maxEirp;                // max. EIRP (initial value)
-    u1_t                rx1DrOff[8];            // RX1 data rate offsets
+    s1_t                rx1DrOff[8];            // RX1 data rate offsets
     u1_t                dr2maxAppPload[16];     // max application payload (assuming no repeater and no fopts)
     u1_t                regcode;                // external region code
 
@@ -150,8 +154,8 @@ enum { MAX_RXSYMS         = 100 };   // stop tracking beacon beyond this
 #define RXDERR_INI 50  // ppm
 #endif
 
-#define LINK_CHECK_OFF  (0x80000000)
-#define LINK_CHECK_INIT (-LMIC.adrAckLimit)
+#define LINK_CHECK_OFF  ((s4_t)0x80000000)
+#define LINK_CHECK_INIT ((s4_t)(-LMIC.adrAckLimit))
 #define LINK_CHECK_DEAD (LMIC.adrAckDelay)
 
 enum { TIME_RESYNC        = 6*128 }; // secs
@@ -165,6 +169,7 @@ enum { DRCHG_SET, DRCHG_NOJACC, DRCHG_NOACK, DRCHG_NOADRACK, DRCHG_NWKCMD };
 enum { KEEP_TXPOWADJ = -128 };
 
 
+#if !defined(DISABLE_CLASSB)
 //! \internal
 typedef struct {
     u1_t     dr;
@@ -175,7 +180,6 @@ typedef struct {
     ostime_t rxtime;    // start of next spot
     u4_t     freq;
 } rxsched_t;
-
 
 //! Parsing and tracking states of beacons.
 enum { BCN_NONE    = 0x00,   //!< No beacon received
@@ -195,11 +199,13 @@ typedef struct {
     s4_t     lat;     //!< Lat field of last beacon (valid only if BCN_FULL set)
     s4_t     lon;     //!< Lon field of last beacon (valid only if BCN_FULL set)
 } bcninfo_t;
+#endif
+
 
 // purpose of receive window - lmic_t.rxState
 enum { RADIO_STOP=0, RADIO_TX=1, RADIO_RX=2, RADIO_RXON=3, RADIO_TXCW, RADIO_CCA, RADIO_INIT, RADIO_CAD, RADIO_TXCONT };
 // Netid values /  lmic_t.netid
-enum { NETID_NONE=(int)~0U, NETID_MASK=(int)0xFFFFFF };
+enum { NETID_NONE=~0U, NETID_MASK=0xFFFFFF };
 // MAC operation modes (lmic_t.opmode).
 enum { OP_NONE     = 0x0000,
        OP_SCAN     = 0x0001, // radio scan to find a beacon
@@ -235,7 +241,7 @@ enum _ev_t { EV_SCAN_TIMEOUT=1, EV_BEACON_FOUND,
              EV_JOINED, EV_RFU1, EV_JOIN_FAILED, EV_REJOIN_FAILED,
              EV_TXCOMPLETE, EV_LOST_TSYNC, EV_RESET, EV_RXCOMPLETE,
              EV_LINK_DEAD, EV_LINK_ALIVE, EV_SCAN_FOUND, EV_TXSTART,
-             EV_TXDONE, EV_DATARATE, EV_START_SCAN, EV_ADR_BACKOFF, EV_SHUTDOWN };
+             EV_TXDONE, EV_DATARATE, EV_START_SCAN, EV_ADR_BACKOFF };
 typedef enum _ev_t ev_t;
 
 
@@ -290,6 +296,7 @@ struct lmic_t {
     s1_t        rssi;
     s1_t        snr;
     rps_t       rps;
+    rps_t       custom_rps; // Used for CUSTOM_DR
     u1_t        rxsyms;
     u1_t        dndr;
     s1_t        txpow;     // dBm -- needs to be combined with brdTxPowOff
@@ -336,7 +343,7 @@ struct lmic_t {
     s1_t        txPowAdj;     // adjustment for txpow (ADR controlled)
     s1_t        brdTxPowOff;  // board-specific power adjustment offset
     dr_t        datarate;     // current data rate
-    u1_t        errcr;        // error coding rate (used for TX only)
+    cr_t        errcr;        // error coding rate (used for TX only)
     u1_t        rejoinCnt;    // adjustment for rejoin datarate
     s2_t        drift;        // last measured drift
     s2_t        lastDriftDiff;
@@ -393,11 +400,13 @@ struct lmic_t {
     u1_t        opts;         // negotiated protocol options
 #endif
 
+#if !defined(DISABLE_CLASSB)
     // Class B state
     u1_t        missedBcns;   // unable to track last N beacons
     s1_t        askForTime;   // how often to ask for time
     //XXX:old: u1_t        pingSetAns;   // answer set cmd and ACK bits
     rxsched_t   ping;         // pingable setup
+#endif
 
     // Public part of MAC state
     u1_t        txCnt;
@@ -406,12 +415,14 @@ struct lmic_t {
     u1_t        dataLen;    // 0 no data or zero length data, >0 byte count of data
     u1_t        frame[MAX_LEN_FRAME];
 
+#if !defined(DISABLE_CLASSB)
     u1_t        bcnfAns;      // mcmd beacon freq: bit7:pending, bit0:ACK/NACK
     u1_t        bcnChnl;
     u4_t        bcnFreq;      // 0=default, !=0: specific BCN freq/no hopping
     u1_t        bcnRxsyms;    //
     ostime_t    bcnRxtime;
     bcninfo_t   bcninfo;      // Last received beacon info
+#endif
 
     u1_t        noRXIQinversion;
 
@@ -441,6 +452,80 @@ DECLARE_LMIC; //!< \internal
 bit_t LMIC_setupChannel (u1_t channel, freq_t freq, u2_t drmap);
 void  LMIC_disableChannel (u1_t channel);
 
+// Manually select the next channel for the next transmission.
+//
+// Warning: This does not do any checking. In particular, this bypasses
+// duty cycle limits, allows selecting a channel that is not configured
+// for the current datarate, and breaks when you select an invalid or
+// disabled channel.
+//
+// The selected channel applies only to the next transmission. Call this
+// *after* setting the datarate (if needed) with LMIC_setDrTxpow(),
+// since that forces a new channel to be selected automatically.
+void LMIC_selectChannel(u1_t channel);
+
+// Use a custom datrate and rps value.
+//
+// This causes the uplink to use the radio settings described by the
+// given rps value, which can be any valid rps setting (even when the
+// region does not normally enable it). The rps setting is used
+// unmodified for uplink, and will have nocrc set for downlink.
+//
+// While the custom datarate is active, it will not be modified
+// automatically (e.g. LinkADRReq is rejected and lowring DR for ADR is
+// suspended), except when it is not enabled for any channel (in dynamic
+// regions).
+//
+// However, if you call this function again to change the rps value for
+// RX1 or RX2 (see below), it will also apply to subsequent uplinks, so
+// you might need to set a new rps or standard datarate before the next
+// uplink.
+//
+// This returns the old uplink DR, which can be later be passed to
+// LMIC_setDrTxpow() to disable the custom datarate again, if needed.
+//
+// RX1
+//
+// Normally, the RX1 datarate is derived from the uplink datarate. When
+// using a custom datarate, it must be set explicitly using the dndr
+// parameter to this function. This can be either a standard datarate
+// value, or CUSTOM_DR to use the same custom rps value as the uplink.
+//
+// To use a custom rps for RX1 that is different from the uplink (or
+// use a custom rps just for RX1), call this function (again) after the
+// EV_TXSTART event (but before EV_TXDONE).
+//
+//
+// RX2
+//
+// To also use a custom datarate for the RX2 window, call this function
+// and set `LMIC.dn2Dr` to CUSTOM_DR. This also causes RXParamSetupReq
+// to be rejected, keeping dn2Dr unmodified.
+//
+// To use a custom rps for RX2 that is different from the uplink and/or
+// RX1 (or use a custom rps just for RX2), call this function (again)
+// after the EV_TXDONE event (but before RX2 starts).
+//
+//
+// Channel selection as normal
+//
+// For fixed regions, any enabled (125kHz) channel will be used.
+//
+// For dynamic regions, any channel that supports CUSTOM_DR will be
+// considered. LMIC_setupChannel() can be used normally, to create one
+// or more channels enabled for CUSTOM_DR. Since the network can
+// potentially disable or reconfigure channels, it is recommended to set
+// up these channels again before every transmission.
+//
+// Disabling CUSTOM_DR
+//
+// To revert uplink and RX1 back to a normal datarate and allow ADR to
+// work again (if enabled), call LMIC_setDrTxpow as normal, passing the
+// DR to use.
+//
+// To revert RX2 back to a normal datarate, just set LMIC.dn2Dr to the
+// appropriate datarate directly.
+dr_t  LMIC_setCustomDr  (rps_t custom_rps, dr_t dndr);
 void  LMIC_setDrTxpow   (dr_t dr, s1_t txpow);  // set default/start DR/txpow
 void  LMIC_setAdrMode   (bit_t enabled);        // set ADR mode (if mobile turn off)
 bit_t LMIC_startJoining (void);
@@ -456,16 +541,22 @@ void  LMIC_setTxData    (void);
 int   LMIC_setTxData2   (u1_t port, u1_t* data, u1_t dlen, u1_t confirmed);
 void  LMIC_sendAlive    (void);
 
+#if !defined(DISABLE_CLASSB)
 u1_t  LMIC_enableTracking  (u1_t tryBcnInfo);
 void  LMIC_disableTracking (void);
+#endif
 
 void  LMIC_setClassC     (u1_t enabled);
+#if !defined(DISABLE_CLASSB)
 void  LMIC_stopPingable  (void);
 u1_t  LMIC_setPingable   (u1_t intvExp);
+#endif
 void  LMIC_tryRejoin     (void);
 
+#if !defined(DISABLE_CLASSB)
 int  LMIC_scan (ostime_t timeout);
 int  LMIC_track (ostime_t when);
+#endif
 int LMIC_setMultiCastSession (devaddr_t grpaddr, const u1_t* nwkKeyDn, const u1_t* appKey, u4_t seqnoAdn);
 
 void LMIC_setSession (u4_t netid, devaddr_t devaddr, const u1_t* nwkKey,
@@ -484,6 +575,7 @@ rps_t    LMIC_dndr2rps (u1_t dr);
 ostime_t LMIC_calcAirTime (rps_t rps, u1_t plen);
 u1_t     LMIC_maxAppPayload();
 ostime_t LMIC_nextTx (ostime_t now);
+void     LMIC_disableDC (void);
 
 // Simulation only APIs
 #if defined(CFG_simul)
@@ -491,11 +583,14 @@ const char* LMIC_addr2func (void* addr);
 int LMIC_arr2len (const char* name);
 #endif
 
+// Declare onEvent() function, to make sure any definition will have the
+// C conventions, even when in a C++ file.
+DECL_ON_LMIC_EVENT;
+
 // Special APIs - for development or testing
 // !!!See implementation for caveats!!!
 #if defined(CFG_extapi)
 void     LMIC_enableFastJoin (void);
-void     LMIC_disableDC (void);
 ostime_t LMIC_dr2hsym (dr_t dr, s1_t num);
 void     LMIC_updateTx (ostime_t now);
 void     LMIC_getRxdErrInfo (s4_t* skew, u4_t* span);
@@ -510,6 +605,10 @@ void     LMIC_getRxdErrInfo (s4_t* skew, u4_t* span);
 #define TRACE_VAL(v)
 #define TRACE_EV(e)
 #define TRACE_ADDR(a)
+#endif
+
+#ifdef __cplusplus
+} // extern "C"
 #endif
 
 #endif // _lmic_h_

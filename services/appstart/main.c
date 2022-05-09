@@ -25,11 +25,11 @@ static void initfunc (osjob_t* job) {
 	    fwi.blversion,
 	    PROJECT_STR, VARIANT_STR, fwi.version, fwi.crc,
 #if 0
-	    (BOOT_DEVINFO->bootmode == TABS_BOOT_UFT) ? "uft" :
-	    (BOOT_DEVINFO->bootmode == TABS_BOOT_SHIPPING) ? "ship" :
-	    (BOOT_DEVINFO->bootmode == TABS_BOOT_FLIGHT) ? "flight" :
+            (BOOT_DEVINFO->bootmode == TABS_BOOT_UFT) ? "uft" :
+            (BOOT_DEVINFO->bootmode == TABS_BOOT_SHIPPING) ? "ship" :
+            (BOOT_DEVINFO->bootmode == TABS_BOOT_FLIGHT) ? "flight" :
 #endif
-	    "normal");
+            "normal");
 #endif
 
 #ifdef SVC_backtrace

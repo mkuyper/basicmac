@@ -589,7 +589,7 @@ static u4_t sleep0 (u4_t hticks, u4_t htt, u4_t ltt) {
 }
 
 static void sleep (int stype, u4_t htt, u4_t ltt) {
-    static const u4_t(*sleepfuncs[])(u4_t,u4_t,u4_t) = {
+    static u4_t(* const sleepfuncs[])(u4_t,u4_t,u4_t) = {
         sleep0,
         sleep1,
         sleep2,
@@ -744,6 +744,7 @@ static void hal_io_init () {
 #endif
 }
 
+#if defined(BRD_sx1272_radio) || defined(BRD_sx1276_radio)
 bool hal_pin_tcxo (u1_t val) {
 #if defined(GPIO_TCXO_PWR)
     if (val != 0) {
@@ -758,6 +759,7 @@ bool hal_pin_tcxo (u1_t val) {
     return false;
 #endif
 }
+#endif // defined(BRD_sx1272_radio) || defined(BRD_sx1276_radio)
 
 void hal_ant_switch (u1_t val) {
 #ifdef SVC_pwrman
@@ -796,13 +798,18 @@ void hal_ant_switch (u1_t val) {
 }
 
 // set radio RST pin to given value (or keep floating!)
-void hal_pin_rst (u1_t val) {
+bool hal_pin_rst (u1_t val) {
+    #ifdef GPIO_RST
     if(val == 0 || val == 1) { // drive pin
         SET_PIN(GPIO_RST, val);
         CFG_PIN(GPIO_RST, GPIOCFG_MODE_OUT | GPIOCFG_OSPEED_40MHz | GPIOCFG_OTYPE_PUPD | GPIOCFG_PUPD_NONE);
     } else { // keep pin floating
         CFG_PIN(GPIO_RST, GPIOCFG_MODE_ANA | GPIOCFG_OSPEED_400kHz | GPIOCFG_OTYPE_OPEN | GPIOCFG_PUPD_NONE);
     }
+    return true;
+    #else
+    return false;
+    #endif
 }
 
 void hal_pin_busy_wait (void) {
@@ -814,6 +821,24 @@ void hal_pin_busy_wait (void) {
     CFG_PIN_DEFAULT(GPIO_BUSY);
 #endif
 }
+
+#if defined(BRD_sx1261_radio) || defined(BRD_sx1262_radio)
+bool hal_dio3_controls_tcxo (void) {
+    #if defined(LMIC_DIO3_CONTROLS_TCXO)
+    return true;
+    #else
+    return false;
+    #endif
+}
+
+bool hal_dio2_controls_rxtx (void) {
+    #if defined(LMIC_DIO2_CONTROLS_RXTX)
+    return true;
+    #else
+    return false;
+    #endif
+}
+#endif // defined(BRD_sx1261_radio) || defined(BRD_sx1262_radio)
 
 #define DIO_UPDATE(dio,mask,time) do { \
     if( (EXTI->PR & (1 << BRD_PIN(GPIO_DIO ## dio))) ) { \

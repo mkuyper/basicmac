@@ -7,6 +7,10 @@
 #ifndef _lorabase_h_
 #define _lorabase_h_
 
+#ifdef __cplusplus
+extern "C"{
+#endif
+
 enum _cr_t { CR_4_5=0, CR_4_6, CR_4_7, CR_4_8 };
 enum _sf_t { FSK=0, SF7, SF8, SF9, SF10, SF11, SF12, SFrfu };
 enum _bw_t { BW125=0, BW250, BW500, BWrfu };
@@ -23,6 +27,11 @@ typedef s1_t eirp_t;
 enum { ILLEGAL_DR  = 0xFF };
 enum { ILLEGAL_RPS = 0xFF };
 enum { ILLEGAL_MAS = 0x00 };
+// DR 15 is used in the LinkADRReq to indicate "no DR changes", so it
+// will never be allocated as a standard DR. So it is used here for a
+// custom DR. By using 15, rather than 0xFF or similar, it can be used
+// in per-channel drmap as normal.
+enum { CUSTOM_DR = 0xF };
 
 // Global maximum frame length
 enum { BCN_PREAMBLE_LEN  = 10 };  // length in symbols - actual time depends on DR
@@ -196,7 +205,7 @@ enum {
     MCMD_RKEY_CNF = 0x0B, // - reset confirmation : u1: opt1, [n opts...]
     MCMD_ADRP_REQ = 0x0C, // - adr params         : u1: 7-4: limit_exp, 3-0: delay_exp
     MCMD_TIME_ANS = 0x0D, // - time answer        : u4:epoch_secs, u1:fracs
-    // Class B		     -
+    // Class B               -
     MCMD_PITV_ANS = 0x10, // - ping interval ack  : -
     MCMD_PNGC_REQ = 0x11, // - set ping freq/dr   : u3: freq, u1:7-4:RFU/3-0:datarate
     MCMD_BCNI_ANS = 0x12, // - next beacon start  : u2: delay(in TUNIT millis), u1:channel -- DEPRECATED
@@ -286,6 +295,12 @@ typedef u4_t devaddr_t;
 // RX quality (device)
 enum { RSSI_OFF=64, SNR_SCALEUP=4 };
 
+#define MAKE_LORA_RPS(sf,bw,cr,ih,nocrc) ((rps_t)((sf) | ((bw)<<3) | ((cr)<<5) | ((nocrc)?(1<<7):0) | ((ih&0xFF)<<8)))
+// FSK uses a subset of LORA fields, so just use MAKE_LORA_RPS here
+#define MAKE_FSK_RPS(nocrc) (MAKE_LORA_RPS(FSK, 0, 0, 0, nocrc))
+
+inline rps_t makeLoraRps  (sf_t sf, bw_t bw, cr_t cr, int ih, int nocrc) { return MAKE_LORA_RPS(sf, bw, cr, ih, nocrc); }
+inline rps_t makeFskRps   (int nocrc)                                    { return MAKE_FSK_RPS(nocrc); }
 inline sf_t  getSf   (rps_t params)            { return   (sf_t)(params &  0x7); }
 inline rps_t setSf   (rps_t params, sf_t sf)   { return (rps_t)((params & ~0x7) | sf); }
 inline bw_t  getBw   (rps_t params)            { return  (bw_t)((params >> 3) & 0x3); }
@@ -296,14 +311,8 @@ inline int   getNocrc(rps_t params)            { return        ((params >> 7) & 
 inline rps_t setNocrc(rps_t params, int nocrc) { return (rps_t)((params & ~0x80) | (nocrc<<7)); }
 inline int   getIh   (rps_t params)            { return        ((params >> 8) & 0xFF); }
 inline rps_t setIh   (rps_t params, int ih)    { return (rps_t)((params & ~0xFF00) | (ih<<8)); }
-inline rps_t makeRps (sf_t sf, bw_t bw, cr_t cr, int ih, int nocrc) {
-    return sf | (bw<<3) | (cr<<5) | (nocrc?(1<<7):0) | ((ih&0xFF)<<8);
-}
-#define MAKERPS(sf,bw,cr,ih,nocrc) ((rps_t)((sf) | ((bw)<<3) | ((cr)<<5) | ((nocrc)?(1<<7):0) | ((ih&0xFF)<<8)))
-#define LWUPDR(sf,bw) ((u1_t)MAKERPS((sf),(bw),CR_4_5,0,0))
-#define LWDNDR(sf,bw) ((u1_t)MAKERPS((sf),(bw),CR_4_5,0,1))
-// Two frames with params r1/r2 would interfere on air: same SFx + BWx 
-inline int sameSfBw(rps_t r1, rps_t r2) { return ((r1^r2)&0x1F) == 0; }
+inline sf_t  isLora  (rps_t params)            { return   getSf(params) >= SF7 && getSf(params) <= SF12; }
+inline sf_t  isFsk   (rps_t params)            { return   getSf(params) == FSK; }
 
 // return 1 for low data rate optimize should be enabled (symbol time equal or above 16.384 ms) else 0
 // Must be enabled for: SF11/BW125, SF12/BW125, SF12/BW250
@@ -321,5 +330,8 @@ ostime_t calcAirTime (rps_t rps, u1_t plen);
 // Sensitivity at given SF/BW
 int getSensitivity (rps_t rps);
 
+#ifdef __cplusplus
+} // extern "C"
+#endif
 
 #endif // _lorabase_h_

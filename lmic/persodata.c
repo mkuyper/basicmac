@@ -34,7 +34,7 @@ static struct {
 static persodata_v1* pd_check_v1 (void* ptr) {
     persodata_v1* ppd = ptr;
     if( ppd->magic == PERSODATA_MAGIC_V1 ) {
-	uint32_t hash[8];
+        uint32_t hash[8];
         sha256(hash, ptr, sizeof(persodata_v1) - 32);
         if( memcmp(hash, ppd->hash, 32) != 0 ) {
             return NULL;

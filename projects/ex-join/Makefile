@@ -20,6 +20,7 @@ SVCS += app
 
 DEFS += -DDEBUG_RX
 DEFS += -DDEBUG_TX
+DEFS += -DUSE_IDEETRON_AES
 
 DEFS += -DSVC_FRAG_TEST  # enable proprietary test command in frag service
 

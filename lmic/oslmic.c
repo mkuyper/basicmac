@@ -18,12 +18,15 @@ static struct {
     } /* anonymous */;
 } OS;
 
+void rng_init (void);
+
 void os_init (void* bootarg) {
     memset(&OS, 0x00, sizeof(OS));
     hal_init(bootarg);
 #ifndef CFG_noradio
     radio_init(false);
 #endif
+    rng_init();
     LMIC_init();
 }
 
@@ -33,21 +36,21 @@ void os_init (void* bootarg) {
 void rng_init (void) {
 #ifdef PERIPH_TRNG
     trng_next(OS.randwrds, 4);
+#elif defined(BRD_sx1261_radio) || defined(BRD_sx1262_radio)
+    radio_generate_random(OS.randwrds, 4);
 #else
     memcpy(OS.randbuf, __TIME__, 8);
     os_getDevEui(OS.randbuf + 8);
 #endif
+    OS.randbuf[0] = 16;
 }
 
 u1_t os_getRndU1 (void) {
     u1_t i = OS.randbuf[0];
-    switch( i ) {
-        case 0:
-            rng_init(); // lazy initialization
-            // fall-thru
-        case 16:
-            os_aes(AES_ENC, OS.randbuf, 16); // encrypt seed with any key
-            i = 0;
+    ASSERT(i != 0);
+    if (i == 16) {
+        os_aes(AES_ENC, OS.randbuf, 16); // encrypt seed with any key
+        i = 0;
     }
     u1_t v = OS.randbuf[i++];
     OS.randbuf[0] = i;
@@ -55,6 +58,7 @@ u1_t os_getRndU1 (void) {
 }
 
 bit_t os_cca (u2_t rps, u4_t freq) { //XXX:this belongs into os_radio module
+    (void) rps; (void)freq; // unused
     return 0;  // never grant access
 }
 
@@ -79,9 +83,9 @@ static int unlinkjob (osjob_t** pnext, osjob_t* job) {
     for( ; *pnext; pnext = &((*pnext)->next)) {
         if(*pnext == job) { // unlink
             *pnext = job->next;
-	    if ((job->flags & OSJOB_FLAG_APPROX) == 0) {
-		OS.exact -= 1;
-	    }
+            if ((job->flags & OSJOB_FLAG_APPROX) == 0) {
+                OS.exact -= 1;
+            }
             return 1;
         }
     }
@@ -97,11 +101,11 @@ static void extendedjobcb (osxjob_t* xjob) {
     hal_disableIRQs();
     osxtime_t now = os_getXTime();
     if (xjob->deadline - now > XJOBTIME_MAX_DIFF) {
-	// schedule intermediate callback
-	os_setTimedCallbackEx((osjob_t*) xjob, (ostime_t) (now + XJOBTIME_MAX_DIFF), (osjobcb_t) extendedjobcb, OSJOB_FLAG_APPROX);
+        // schedule intermediate callback
+        os_setTimedCallbackEx((osjob_t*) xjob, (ostime_t) (now + XJOBTIME_MAX_DIFF), (osjobcb_t) extendedjobcb, OSJOB_FLAG_APPROX);
     } else {
-	// schedule final callback
-	os_setTimedCallbackEx((osjob_t*) xjob, (ostime_t) xjob->deadline, xjob->func, OSJOB_FLAG_APPROX);
+        // schedule final callback
+        os_setTimedCallbackEx((osjob_t*) xjob, (ostime_t) xjob->deadline, xjob->func, OSJOB_FLAG_APPROX);
     }
     hal_enableIRQs();
 }
@@ -114,6 +118,9 @@ void os_setExtendedTimedCallback (osxjob_t* xjob, osxtime_t xtime, osjobcb_t cb)
     xjob->deadline = xtime;
     extendedjobcb(xjob);
     hal_enableIRQs();
+#ifdef DEBUG_JOBS
+    debug_verbose_printf("Scheduled job %u, cb %u at %t\r\n", (unsigned)xjob, (unsigned)cb, xtime);
+#endif // DEBUG_JOBS
 }
 
 // clear scheduled job, return 1 if job was removed
@@ -121,6 +128,10 @@ int os_clearCallback (osjob_t* job) {
     hal_disableIRQs();
     int r = unlinkjob(&OS.scheduledjobs, job);
     hal_enableIRQs();
+#ifdef DEBUG_JOBS
+    if (r)
+        debug_verbose_printf("Cleared job %u\r\n", (unsigned)job);
+#endif // DEBUG_JOBS
     return r;
 }
 
@@ -135,14 +146,14 @@ void os_setTimedCallbackEx (osjob_t* job, ostime_t time, osjobcb_t cb, unsigned 
     if( flags & OSJOB_FLAG_NOW ) {
         time = now;
     } else if ( time - now <= 0 ) {
-	flags |= OSJOB_FLAG_NOW;
+        flags |= OSJOB_FLAG_NOW;
     }
     job->deadline = time;
     job->func = cb;
     job->next = NULL;
     job->flags = flags;
     if ((flags & OSJOB_FLAG_APPROX) == 0) {
-	OS.exact += 1;
+        OS.exact += 1;
     }
     // insert into schedule
     for(pnext=&OS.scheduledjobs; *pnext; pnext=&((*pnext)->next)) {
@@ -154,6 +165,12 @@ void os_setTimedCallbackEx (osjob_t* job, ostime_t time, osjobcb_t cb, unsigned 
     }
     *pnext = job;
     hal_enableIRQs();
+#ifdef DEBUG_JOBS
+    if (flags & OSJOB_FLAG_NOW)
+        debug_verbose_printf("Scheduled job %u, cb %u ASAP\r\n", (unsigned)job, (unsigned)cb);
+    else
+        debug_verbose_printf("Scheduled job %u, cb %u%s at %s%t\r\n", (unsigned)job, (unsigned)cb, flags & OSJOB_FLAG_IRQDISABLED ? " (irq disabled)" : "", flags & OSJOB_FLAG_APPROX ? "approx " : "", time);
+#endif // DEBUG_JOBS
 }
 
 void os_runstep (void) {
@@ -166,12 +183,20 @@ void os_runstep (void) {
         deadline = j->deadline;
         if( (deadline - now) <= 0 ) {
 	    OS.scheduledjobs = j->next; // de-queue
-            if( (j->flags & OSJOB_FLAG_IRQDISABLED) == 0 ) {
+            if( (j->flags & OSJOB_FLAG_IRQDISABLED) == 0) {
                 hal_enableIRQs();
+#ifdef DEBUG_JOBS
+                debug_verbose_printf("Running job 0x%08x, cb 0x%08x, deadline %t\r\n",
+                        (unsigned int) j, (unsigned int) j->func, (ostime_t)j->deadline);
+#endif
             }
             hal_watchcount(30); // max 60 sec XXX
             j->func(j);
             hal_watchcount(0);
+#ifdef DEBUG_JOBS
+            debug_verbose_printf("Ran job 0x%08x, cb 0x%08x, deadline %t\r\n",
+                    (unsigned int) j, (unsigned int) j->func, (ostime_t)j->deadline);
+#endif
             return;
         }
     } else {
@@ -184,7 +209,7 @@ void os_runstep (void) {
 // execute jobs from timer and from run queue
 void os_runloop (void) {
     while (1) {
-	os_runstep();
+        os_runstep();
     }
 }
 
